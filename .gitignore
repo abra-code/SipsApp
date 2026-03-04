@@ -1,0 +1,5 @@
+# Sips.app
+Sips.app/Contents/Frameworks/
+Sips.app/Contents/MacOS/
+Sips.app/Contents/_CodeSignature/
+.DS_Store
