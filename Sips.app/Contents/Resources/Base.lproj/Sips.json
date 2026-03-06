@@ -9,10 +9,7 @@
       "minHeight": 835
     },
     "padding": {
-      "top": 16,
-      "leading": 16,
-      "bottom": 16,
-      "trailing": 16
+      "top": 4
     }
   },
   "sidebar": {
@@ -31,7 +28,7 @@
         "id": 10,
         "properties": {
           "columns": ["Image"],
-          "widths": [240],
+          "widths": [230],
           "actionID": "sips.files.selection.changed",
           "doubleClickActionID": "sips.files.double.click"
         }
@@ -298,7 +295,10 @@
       },
       {
         "type": "HStack",
-        "properties": { "spacing": 12 },
+        "properties": {
+            "spacing": 12,
+            "padding": "default"
+        },
         "children": [
           { "type": "Spacer" },
           { "type": "Button", "properties": { "title": "Convert", "buttonStyle": "borderedProminent", "actionID": "sips.start.batch" } }
