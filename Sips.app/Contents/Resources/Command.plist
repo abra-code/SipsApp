@@ -162,9 +162,18 @@
 			<key>NAME</key>
 			<string>Sips</string>
 			<key>COMMAND_ID</key>
-			<string>sips.quicklook</string>
+			<string>sips.update.preview</string>
 			<key>EXECUTION_MODE</key>
 			<string>exe_script_file</string>
+		</dict>
+
+		<dict>
+			<key>NAME</key>
+			<string>Sips</string>
+			<key>COMMAND_ID</key>
+			<string>sips.info</string>
+			<key>EXECUTION_MODE</key>
+			<string>exe_script_file_with_output_window</string>
 		</dict>
 
 	</array>

@@ -37,10 +37,14 @@ IFS=$'\n' read -r -d '' -a files <<< "$file_paths" || true
 
 echo "[DEBUG] Number of files: ${#files[@]}"
 
-# Get options
+# Get overwrite option
 overwrite="$OMC_ACTIONUI_VIEW_14_VALUE"
 
 echo "[DEBUG] overwrite = $overwrite"
+
+# Build sips core args once (resize, rotate, flip, format)
+sips_core_args=$(build_sips_args)
+echo "[DEBUG] sips core args: $sips_core_args"
 
 # Collect errors and results
 errors=""
@@ -66,8 +70,11 @@ for file_path in "${files[@]}"; do
             skipped="${skipped}
 - ${name_without_ext}.${output_format}: skipped"
         else
-            # Run sips conversion and capture output
-            output="$(/usr/bin/sips -s format "$output_format" "$file_path" --out "$output_file" 2>&1)"
+            # Build complete sips command with input and output paths
+            sips_cmd="/usr/bin/sips $sips_core_args --out \"$output_file\" \"$file_path\""
+            echo "[DEBUG] Running: $sips_cmd"
+            
+            output=$(/usr/bin/sips $sips_core_args --out "$output_file" "$file_path" 2>&1)
             exit_code=$?
             
             if [ $exit_code -eq 0 ]; then

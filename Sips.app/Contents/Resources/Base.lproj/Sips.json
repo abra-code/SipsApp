@@ -6,7 +6,7 @@
     "style": "balanced",
     "frame": {
       "minWidth": 800,
-      "minHeight": 480
+      "minHeight": 835
     },
     "padding": {
       "top": 16,
@@ -21,8 +21,8 @@
       "spacing": 8,
       "navigationSplitViewColumnWidth": {
         "min": 220,
-        "ideal": 320,
-        "max": 360
+        "ideal": 280,
+        "max": 320
       }
     },
     "children": [
@@ -30,13 +30,10 @@
         "type": "Table",
         "id": 10,
         "properties": {
-          "columns": ["Filename"],
-          "widths": [280],
-          "itemType": {
-            "viewType": "Text"
-          },
-          "valueChangeActionID": "sips.files.selection.changed",
-          "doubleClickActionID": "sips.files.double.click",
+          "columns": ["Image"],
+          "widths": [240],
+          "actionID": "sips.files.selection.changed",
+          "doubleClickActionID": "sips.files.double.click"
         }
       },
       {
@@ -90,12 +87,12 @@
           },
           {
             "type": "Button",
-            "id": 105,
+            "id": 104,
             "properties": {
-              "systemImage": "eye",
+              "systemImage": "finder",
               "imageScale": "medium",
               "buttonStyle": "plain",
-              "actionID": "sips.quicklook",
+              "actionID": "sips.reveal.in.finder",
               "disabled": true,
               "frame": {
                 "width": 32,
@@ -105,12 +102,12 @@
           },
           {
             "type": "Button",
-            "id": 104,
+            "id": 106,
             "properties": {
-              "systemImage": "finder",
+              "systemImage": "info.circle",
               "imageScale": "medium",
               "buttonStyle": "plain",
-              "actionID": "sips.reveal.in.finder",
+              "actionID": "sips.info",
               "disabled": true,
               "frame": {
                 "width": 32,
@@ -142,41 +139,40 @@
   "detail": {
     "type": "VStack",
     "properties": {
+      "spacing": 12,
       "frame": {
-        "minWidth": 420,
-        "idealWidth": 460
-      },
-      "spacing": 16
+        "minWidth": 380,
+        "idealWidth": 420
+      }
     },
     "children": [
       {
         "type": "GroupBox",
         "properties": {
-          "title": "Image Details",
+          "title": "Preview",
+          "padding": "default",
           "frame": {
-            "minWidth": 400
+            "minWidth": 380,
+            "maxWidth": 99999,
+            "minHeight": 280
           }
         },
         "children": [
           {
             "type": "ScrollView",
             "properties": {
-              "frame": {
-                "minWidth": 390,
-                "idealWidth": 390,
-                "maxWidth": 390,
-                "minHeight": 200
-              }
+              "axis": "both"
             },
             "content": {
-              "type": "Text",
-              "id": 12,
+              "type": "Image",
+              "id": 20,
               "properties": {
-                "text": "",
-                "frame": {
-                "minWidth": 380,
-                },
-                "foregroundStyle": "secondary",
+                "resizable": true,
+                "scaleMode": "fit",
+                "border": {
+                  "color": "#80808040",
+                  "width": 1.0
+                }
               }
             }
           }
@@ -185,93 +181,129 @@
       {
         "type": "GroupBox",
         "properties": {
-          "title": "Output Format",
+          "title": "Settings",
+          "padding": "default",
           "frame": {
-            "minWidth": 400,
+            "minWidth": 380,
+            "maxWidth": 99999
           }
         },
         "children": [
           {
             "type": "VStack",
             "properties": {
-              "spacing": 14,
-              "alignment": "leading",
-              "padding": {
-                "top": 12,
-                "leading": 12,
-                "bottom": 20,
-                "trailing": 12
-              },
-              "frame": {
-                "minWidth": 390,
-                "idealWidth": 390,
-                "maxWidth": 390
-              }
+              "spacing": 16,
+              "padding": "default",
+              "alignment": "leading"
             },
             "children": [
               {
-                "type": "Picker",
-                "id": 13,
-                "properties": {
-                  "title": "Output Format",
-                  "options": [
-                    {"title": "JPEG", "tag": "jpeg"},
-                    {"title": "PNG", "tag": "png"},
-                    {"title": "TIFF", "tag": "tiff"},
-                    {"title": "GIF", "tag": "gif"},
-                    {"title": "HEIC", "tag": "heic"},
-                    {"title": "PDF", "tag": "pdf"},
-                    {"title": "BMP", "tag": "bmp"},
-                    {"title": "WebP", "tag": "webp"},
-                    {"title": "PSD", "tag": "psd"}
-                  ],
-                  "actionID": "sips.format.changed"
-                }
+                "type": "HStack",
+                "properties": { "spacing": 16 },
+                "children": [
+                  {
+                    "type": "Picker",
+                    "id": 30,
+                    "properties": {
+                      "title": "Resize",
+                      "pickerStyle": "menu",
+                      "options": [
+                        {"title": "Exact Pixels", "tag": "exact"},
+                        {"title": "Width", "tag": "width"},
+                        {"title": "Height", "tag": "height"},
+                        {"title": "Longest Edge", "tag": "longest"}
+                      ],
+                      "actionID": "sips.update.preview"
+                    }
+                  },
+                  { "type": "TextField", "id": 31, "properties": { "placeholder": "Width", "frame": { "width": 70 }, "actionID": "sips.update.preview" } },
+                  { "type": "Text", "properties": { "text": "x", "foregroundStyle": "secondary" } },
+                  { "type": "TextField", "id": 32, "properties": { "placeholder": "Height", "frame": { "width": 70 }, "actionID": "sips.update.preview" } }
+                ]
               },
               {
-                "type": "Toggle",
-                "id": 14,
-                "properties": {
-                  "title": "Overwrite existing files"
-                }
+                "type": "HStack",
+                "properties": { "spacing": 16 },
+                "children": [
+                  {
+                    "type": "Picker",
+                    "id": 40,
+                    "properties": {
+                      "title": "Rotate",
+                      "pickerStyle": "menu",
+                      "options": [
+                        {"title": "0°", "tag": "0"},
+                        {"title": "90°", "tag": "90"},
+                        {"title": "180°", "tag": "180"},
+                        {"title": "270°", "tag": "270"},
+                        {"title": "-90°", "tag": "-90"},
+                        {"title": "-180°", "tag": "-180"},
+                        {"title": "-270°", "tag": "-270"}
+                      ],
+                      "actionID": "sips.update.preview"
+                    }
+                  }
+                ]
               },
               {
-                "type": "Toggle",
-                "id": 15,
-                "properties": {
-                  "title": "Don't copy metadata (author, subject, etc.)"
-                }
-              }
+                "type": "HStack",
+                "properties": { "spacing": 16 },
+                "children": [
+                  {
+                    "type": "Picker",
+                    "id": 42,
+                    "properties": {
+                      "title": "Flip",
+                      "pickerStyle": "menu",
+                      "options": [
+                        {"title": "None", "tag": "none"},
+                        {"title": "Horizontal", "tag": "horizontal"},
+                        {"title": "Vertical", "tag": "vertical"}
+                      ],
+                      "actionID": "sips.update.preview"
+                    }
+                  }
+                ]
+              },
+              {
+                "type": "HStack",
+                "properties": { "spacing": 16 },
+                "children": [
+                  {
+                    "type": "Picker",
+                    "id": 13,
+                    "properties": {
+                      "title": "Format",
+                      "pickerStyle": "menu",
+                      "options": [
+                        {"title": "JPEG", "tag": "jpeg"},
+                        {"title": "PNG", "tag": "png"}
+                       ],
+                      "actionID": "sips.update.preview"
+                    }
+                  }
+                ]
+              },
+              {
+                "type": "HStack",
+                "properties": { "spacing": 16 },
+                "children": [
+                  { "type": "Toggle", "id": 14, "properties": { "title": "Overwrite existing files" } }
+                ]
+              },
+              { "type": "Divider", "properties": { "opacity": 0, "frame": { "height": 0 } } }
             ]
           }
         ]
-          },
-      {
-        "type": "Spacer",
       },
       {
-    "type": "HStack",
-    "properties": {
-      "spacing": 16
-    },
-    "children": [
-      {
-        "type": "Spacer"
-      },
-      {
-        "type": "Button",
-        "properties": {
-          "title": "Convert",
-            "padding": {
-              "bottom": 8,
-              "trailing": 8
-            },
-          "buttonStyle": "borderedProminent",
-          "actionID": "sips.start.batch"
-        }
+        "type": "HStack",
+        "properties": { "spacing": 12 },
+        "children": [
+          { "type": "Spacer" },
+          { "type": "Button", "properties": { "title": "Convert", "buttonStyle": "borderedProminent", "actionID": "sips.start.batch" } }
+        ]
       }
-    ]
-  }
     ]
   }
 }
