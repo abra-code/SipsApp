@@ -20,6 +20,9 @@ FLIP_PICKER_ID=42
 
 # Format controls
 FORMAT_PICKER_ID=13
+COMPRESSION_PICKER_ID=50
+QUALITY_FIELD_ID=51
+QUALITY_LABEL_ID=52
 
 # Get dialog tool path
 dialog_tool="$OMC_OMC_SUPPORT_PATH/omc_dialog_control"
@@ -82,9 +85,11 @@ add_files_to_table() {
 }
 
 # Function to build sips command arguments from current UI settings (without input/output paths)
+# Arguments: optional image_path for percentage calculation
 # Returns: sips arguments string (e.g., "-s format jpeg -z 100 100 -r 90")
 build_sips_args() {
     local sips_args=""
+    local image_path="$1"
     
     # Get resize mode (30: exact/width/height/longest)
     local resize_mode="$OMC_ACTIONUI_VIEW_30_VALUE"
@@ -92,6 +97,16 @@ build_sips_args() {
     # Get width and height values
     local width="$OMC_ACTIONUI_VIEW_31_VALUE"
     local height="$OMC_ACTIONUI_VIEW_32_VALUE"
+    
+    # Check for corrected values from temp file (set by sips.update.preview.sh)
+    local corrected_file="/tmp/sips_corrected_values.txt"
+    if [ -f "$corrected_file" ]; then
+        local corrected_width
+        corrected_width=$(grep "^width=" "$corrected_file" | cut -d= -f2)
+        if [ -n "$corrected_width" ]; then
+            width="$corrected_width"
+        fi
+    fi
     
     # Apply resize options
     case "$resize_mode" in
@@ -115,6 +130,28 @@ build_sips_args() {
                 sips_args="$sips_args -Z $width"
             fi
             ;;
+        percent)
+            # Calculate pixel dimensions from percentage
+            if [ -n "$width" ] && [ -n "$image_path" ] && [ -e "$image_path" ]; then
+                # Validate and clamp percentage
+                local percent="$width"
+                if ! [[ "$percent" =~ ^[0-9]+$ ]] || [ "$percent" -lt 1 ]; then
+                    percent=100
+                elif [ "$percent" -gt 500 ]; then
+                    percent=500
+                fi
+                
+                # Get original dimensions
+                local orig_width=$(/usr/bin/sips -g pixelWidth "$image_path" 2>/dev/null | /usr/bin/awk '/pixelWidth/{print $2}')
+                local orig_height=$(/usr/bin/sips -g pixelHeight "$image_path" 2>/dev/null | /usr/bin/awk '/pixelHeight/{print $2}')
+                
+                if [ -n "$orig_width" ] && [ -n "$orig_height" ] && [ "$orig_width" -gt 0 ]; then
+                    local new_width=$(echo "scale=0; $orig_width * $percent / 100" | /usr/bin/bc)
+                    local new_height=$(echo "scale=0; $orig_height * $percent / 100" | /usr/bin/bc)
+                    sips_args="$sips_args -z $new_height $new_width"
+                fi
+            fi
+            ;;
     esac
     
     # Get rotation (40: -180 to 180, step 90)
@@ -133,6 +170,26 @@ build_sips_args() {
     local output_format="$OMC_ACTIONUI_VIEW_13_VALUE"
     if [ -n "$output_format" ]; then
         sips_args="$sips_args -s format $output_format"
+        
+        # Get compression/quality option - check picker (50) first, then text field (51)
+        local compression="$OMC_ACTIONUI_VIEW_50_VALUE"
+        local quality="$OMC_ACTIONUI_VIEW_51_VALUE"
+        
+        if [ -n "$quality" ] && [ "$quality" != "default" ]; then
+            # Validate quality - default to 80 if not a number, clamp to 1-100
+            if [[ "$quality" =~ ^[0-9]+$ ]]; then
+                if [ "$quality" -gt 100 ]; then
+                    quality=100
+                elif [ "$quality" -lt 1 ]; then
+                    quality=1
+                fi
+            else
+                quality=80
+            fi
+            sips_args="$sips_args -s formatOptions $quality"
+        elif [ -n "$compression" ] && [ "$compression" != "default" ]; then
+            sips_args="$sips_args -s formatOptions $compression"
+        fi
     fi
     
     echo "$sips_args"

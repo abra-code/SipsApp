@@ -206,6 +206,7 @@
                       "pickerStyle": "menu",
                       "options": [
                         {"title": "Exact Pixels", "tag": "exact"},
+                        {"title": "Percentage", "tag": "percent"},
                         {"title": "Width", "tag": "width"},
                         {"title": "Height", "tag": "height"},
                         {"title": "Longest Edge", "tag": "longest"}
@@ -214,7 +215,7 @@
                     }
                   },
                   { "type": "TextField", "id": 31, "properties": { "placeholder": "Width", "frame": { "width": 70 }, "actionID": "sips.update.preview" } },
-                  { "type": "Text", "properties": { "text": "x", "foregroundStyle": "secondary" } },
+                  { "type": "Text", "id": 33, "properties": { "text": "x", "foregroundStyle": "secondary" } },
                   { "type": "TextField", "id": 32, "properties": { "placeholder": "Height", "frame": { "width": 70 }, "actionID": "sips.update.preview" } }
                 ]
               },
@@ -239,13 +240,7 @@
                       ],
                       "actionID": "sips.update.preview"
                     }
-                  }
-                ]
-              },
-              {
-                "type": "HStack",
-                "properties": { "spacing": 16 },
-                "children": [
+                  },
                   {
                     "type": "Picker",
                     "id": 42,
@@ -257,6 +252,7 @@
                         {"title": "Horizontal", "tag": "horizontal"},
                         {"title": "Vertical", "tag": "vertical"}
                       ],
+                      "padding": { "leading": 45 },
                       "actionID": "sips.update.preview"
                     }
                   }
@@ -274,8 +270,46 @@
                       "pickerStyle": "menu",
                       "options": [
                         {"title": "JPEG", "tag": "jpeg"},
-                        {"title": "PNG", "tag": "png"}
                        ],
+                      "actionID": "sips.format.changed"
+                    }
+                  },
+                  {
+                    "type": "Picker",
+                    "id": 50,
+                    "properties": {
+                      "title": "Compression",
+                      "pickerStyle": "menu",
+                      "options": [
+                        {"title": "Default", "tag": "default"}
+                       ],
+                      "actionID": "sips.update.preview",
+                      "hidden": true
+                    }
+                  }
+
+                ]
+              },
+              {
+                "type": "HStack",
+                "properties": { "spacing": 8 },
+                "children": [
+                  {
+                    "type": "Text",
+                    "id": 52,
+                    "properties": {
+                        "text": "Quality",
+                        "foregroundStyle": "secondary",
+                        "padding": { "leading": 50 }
+                    }
+                  },
+                  {
+                    "type": "TextField",
+                    "id": 51,
+                    "properties": {
+                      "placeholder": "1-100",
+                      "text": "80",
+                      "frame": { "width": 50 },
                       "actionID": "sips.update.preview"
                     }
                   }

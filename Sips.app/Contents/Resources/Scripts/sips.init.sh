@@ -57,16 +57,21 @@ while IFS= read -r line; do
         if [ -n "$format" ] && [ "$format" != "--" ]; then
             # Get display name
             display_name=$(get_format_name "$format")
-            
-            if [ "$first" = true ]; then
-                first=false
-            else
-                options_json="${options_json},"
-            fi
-            options_json="${options_json}{\"title\": \"${display_name}\", \"tag\": \"${format}\"}"
+            echo "${display_name}|${format}"
         fi
     fi
-done <<< "$sips_formats"
+done <<< "$sips_formats" | /usr/bin/sort -d > /tmp/sips_formats_sorted.txt
+
+# Build JSON from sorted formats
+first=true
+while IFS='|' read -r display_name format; do
+    if [ "$first" = true ]; then
+        first=false
+    else
+        options_json="${options_json},"
+    fi
+    options_json="${options_json}{\"title\": \"${display_name}\", \"tag\": \"${format}\"}"
+done < /tmp/sips_formats_sorted.txt
 
 options_json="${options_json}]"
 
@@ -74,6 +79,10 @@ echo "[DEBUG] Format options: $options_json"
 
 # Set the format picker options dynamically
 "$dialog_tool" "$window_uuid" ${FORMAT_PICKER_ID} omc_set_property "options" "$options_json"
+
+# Initialize compression controls - default to JPEG with quality 80
+"$dialog_tool" "$window_uuid" ${QUALITY_FIELD_ID} 80
+"$dialog_tool" "$window_uuid" ${QUALITY_FIELD_ID} omc_set_property "disabled" "false"
 
 # If files were dropped on the app, add them
 # OMC_OBJ_PATH contains newline-separated list of file paths

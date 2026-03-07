@@ -42,9 +42,8 @@ overwrite="$OMC_ACTIONUI_VIEW_14_VALUE"
 
 echo "[DEBUG] overwrite = $overwrite"
 
-# Build sips core args once (resize, rotate, flip, format)
-sips_core_args=$(build_sips_args)
-echo "[DEBUG] sips core args: $sips_core_args"
+# Get resize mode for percentage handling
+resize_mode="$OMC_ACTIONUI_VIEW_30_VALUE"
 
 # Collect errors and results
 errors=""
@@ -70,11 +69,18 @@ for file_path in "${files[@]}"; do
             skipped="${skipped}
 - ${name_without_ext}.${output_format}: skipped"
         else
+            # Build sips args - for percent mode, calculate per-file
+            if [ "$resize_mode" = "percent" ]; then
+                sips_args=$(build_sips_args "$file_path")
+            else
+                sips_args=$(build_sips_args)
+            fi
+            
             # Build complete sips command with input and output paths
-            sips_cmd="/usr/bin/sips $sips_core_args --out \"$output_file\" \"$file_path\""
+            sips_cmd="/usr/bin/sips $sips_args --out \"$output_file\" \"$file_path\""
             echo "[DEBUG] Running: $sips_cmd"
             
-            output=$(/usr/bin/sips $sips_core_args --out "$output_file" "$file_path" 2>&1)
+            output=$(/usr/bin/sips $sips_args --out "$output_file" "$file_path" 2>&1)
             exit_code=$?
             
             if [ $exit_code -eq 0 ]; then
