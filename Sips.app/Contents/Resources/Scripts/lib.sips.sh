@@ -24,9 +24,27 @@ COMPRESSION_PICKER_ID=50
 QUALITY_FIELD_ID=51
 QUALITY_LABEL_ID=52
 
+# State file to track current resize mode across script invocations
+RESIZE_MODE_STATE_FILE="/tmp/sips_resize_mode.txt"
+
 # Get dialog tool path
 dialog_tool="$OMC_OMC_SUPPORT_PATH/omc_dialog_control"
 window_uuid="$OMC_ACTIONUI_WINDOW_UUID"
+
+# Get original pixel dimensions of an image file.
+# Arguments: image_file_path
+# Sets: _orig_width, _orig_height (caller reads these variables)
+get_image_dimensions() {
+    local img="$1"
+    _orig_width=""
+    _orig_height=""
+    if [ -n "$img" ] && [ -e "$img" ]; then
+        local sips_out
+        sips_out=$(/usr/bin/sips -g pixelWidth -g pixelHeight "$img" 2>/dev/null)
+        _orig_width=$(echo "$sips_out" | /usr/bin/awk '/pixelWidth/{print $2}')
+        _orig_height=$(echo "$sips_out" | /usr/bin/awk '/pixelHeight/{print $2}')
+    fi
+}
 
 # Function to add image files to the table
 # Arguments: newline-separated list of file/directory paths to add
@@ -94,20 +112,11 @@ build_sips_args() {
     # Get resize mode (30: exact/width/height/longest)
     local resize_mode="$OMC_ACTIONUI_VIEW_30_VALUE"
     
-    # Get width and height values
+    # Get width and height values from UI fields.
+    # In pixel modes these are pixel values; in percent mode width is a percentage.
     local width="$OMC_ACTIONUI_VIEW_31_VALUE"
     local height="$OMC_ACTIONUI_VIEW_32_VALUE"
-    
-    # Check for corrected values from temp file (set by sips.update.preview.sh)
-    local corrected_file="/tmp/sips_corrected_values.txt"
-    if [ -f "$corrected_file" ]; then
-        local corrected_width
-        corrected_width=$(grep "^width=" "$corrected_file" | cut -d= -f2)
-        if [ -n "$corrected_width" ]; then
-            width="$corrected_width"
-        fi
-    fi
-    
+
     # Apply resize options
     case "$resize_mode" in
         exact)
@@ -131,23 +140,19 @@ build_sips_args() {
             fi
             ;;
         percent)
-            # Calculate pixel dimensions from percentage
+            # The width field contains a percentage value — compute absolute pixels per image
             if [ -n "$width" ] && [ -n "$image_path" ] && [ -e "$image_path" ]; then
-                # Validate and clamp percentage
                 local percent="$width"
                 if ! [[ "$percent" =~ ^[0-9]+$ ]] || [ "$percent" -lt 1 ]; then
                     percent=100
                 elif [ "$percent" -gt 500 ]; then
                     percent=500
                 fi
-                
-                # Get original dimensions
-                local orig_width=$(/usr/bin/sips -g pixelWidth "$image_path" 2>/dev/null | /usr/bin/awk '/pixelWidth/{print $2}')
-                local orig_height=$(/usr/bin/sips -g pixelHeight "$image_path" 2>/dev/null | /usr/bin/awk '/pixelHeight/{print $2}')
-                
-                if [ -n "$orig_width" ] && [ -n "$orig_height" ] && [ "$orig_width" -gt 0 ]; then
-                    local new_width=$(echo "scale=0; $orig_width * $percent / 100" | /usr/bin/bc)
-                    local new_height=$(echo "scale=0; $orig_height * $percent / 100" | /usr/bin/bc)
+
+                get_image_dimensions "$image_path"
+                if [ -n "$_orig_width" ] && [ -n "$_orig_height" ] && [ "$_orig_width" -gt 0 ]; then
+                    local new_width=$(( _orig_width * percent / 100 ))
+                    local new_height=$(( _orig_height * percent / 100 ))
                     sips_args="$sips_args -z $new_height $new_width"
                 fi
             fi
