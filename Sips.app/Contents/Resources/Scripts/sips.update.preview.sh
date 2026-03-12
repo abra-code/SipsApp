@@ -137,7 +137,7 @@ handle_resize_mode_change() {
     case "$new_mode" in
         exact)
             set_field_visibility "false" "false" "false"
-            "$dialog_tool" "$window_uuid" ${WIDTH_FIELD_ID} omc_set_property "placeholder" "Width"
+            "$dialog_tool" "$window_uuid" ${WIDTH_FIELD_ID} omc_set_property "title" "Width"
             # Switching away from percent → restore original pixel dimensions
             if [ "$was_percent" = "true" ]; then
                 restore_pixel_values "exact"
@@ -145,7 +145,7 @@ handle_resize_mode_change() {
             ;;
         width)
             set_field_visibility "false" "true" "true"
-            "$dialog_tool" "$window_uuid" ${WIDTH_FIELD_ID} omc_set_property "placeholder" "Width"
+            "$dialog_tool" "$window_uuid" ${WIDTH_FIELD_ID} omc_set_property "title" "Width"
             if [ "$was_percent" = "true" ]; then
                 restore_pixel_values "width"
             fi
@@ -153,7 +153,7 @@ handle_resize_mode_change() {
             ;;
         height)
             set_field_visibility "true" "false" "true"
-            "$dialog_tool" "$window_uuid" ${HEIGHT_FIELD_ID} omc_set_property "placeholder" "Height"
+            "$dialog_tool" "$window_uuid" ${HEIGHT_FIELD_ID} omc_set_property "title" "Height"
             if [ "$was_percent" = "true" ]; then
                 restore_pixel_values "height"
             fi
@@ -161,21 +161,21 @@ handle_resize_mode_change() {
             ;;
         longest)
             set_field_visibility "false" "true" "true"
-            "$dialog_tool" "$window_uuid" ${WIDTH_FIELD_ID} omc_set_property "placeholder" "Longest"
+            "$dialog_tool" "$window_uuid" ${WIDTH_FIELD_ID} omc_set_property "title" "Longest"
             if [ "$was_percent" = "true" ]; then
                 restore_pixel_values "longest"
             fi
             ;;
         percent)
             set_field_visibility "false" "true" "true"
-            "$dialog_tool" "$window_uuid" ${WIDTH_FIELD_ID} omc_set_property "placeholder" "Percent"
+            "$dialog_tool" "$window_uuid" ${WIDTH_FIELD_ID} omc_set_property "title" "Percent"
             # Always reset to 100 % when entering percent mode
             "$dialog_tool" "$window_uuid" ${WIDTH_FIELD_ID} "100"
             export OMC_ACTIONUI_VIEW_31_VALUE="100"
             ;;
         *)
             set_field_visibility "false" "false" "false"
-            "$dialog_tool" "$window_uuid" ${WIDTH_FIELD_ID} omc_set_property "placeholder" "Width"
+            "$dialog_tool" "$window_uuid" ${WIDTH_FIELD_ID} omc_set_property "title" "Width"
             ;;
     esac
 }

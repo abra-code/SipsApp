@@ -6,7 +6,7 @@
     "style": "balanced",
     "frame": {
       "minWidth": 800,
-      "minHeight": 835
+      "minHeight": 800
     },
     "padding": {
       "top": 4
@@ -214,9 +214,9 @@
                       "actionID": "sips.update.preview"
                     }
                   },
-                  { "type": "TextField", "id": 31, "properties": { "placeholder": "Width", "frame": { "width": 70 }, "actionID": "sips.update.preview" } },
+                  { "type": "TextField", "id": 31, "properties": { "prompt": "width", "frame": { "width": 70 }, "actionID": "sips.update.preview" } },
                   { "type": "Text", "id": 33, "properties": { "text": "x", "foregroundStyle": "secondary" } },
-                  { "type": "TextField", "id": 32, "properties": { "placeholder": "Height", "frame": { "width": 70 }, "actionID": "sips.update.preview" } }
+                  { "type": "TextField", "id": 32, "properties": { "prompt": "height", "frame": { "width": 70 }, "actionID": "sips.update.preview" } }
                 ]
               },
               {
@@ -307,19 +307,11 @@
                     "type": "TextField",
                     "id": 51,
                     "properties": {
-                      "placeholder": "1-100",
                       "text": "80",
                       "frame": { "width": 50 },
                       "actionID": "sips.update.preview"
                     }
                   }
-                ]
-              },
-              {
-                "type": "HStack",
-                "properties": { "spacing": 16 },
-                "children": [
-                  { "type": "Toggle", "id": 14, "properties": { "title": "Overwrite existing files" } }
                 ]
               },
               { "type": "Divider", "properties": { "opacity": 0, "frame": { "height": 0 } } }
@@ -334,6 +326,7 @@
             "padding": "default"
         },
         "children": [
+          { "type": "Toggle", "id": 14, "properties": { "title": "Overwrite existing files" } },
           { "type": "Spacer" },
           { "type": "Button", "properties": { "title": "Convert", "buttonStyle": "borderedProminent", "actionID": "sips.start.batch" } }
         ]
