@@ -214,9 +214,9 @@
                       "actionID": "sips.update.preview"
                     }
                   },
-                  { "type": "TextField", "id": 31, "properties": { "prompt": "width", "frame": { "width": 70 }, "actionID": "sips.update.preview" } },
+                  { "type": "TextField", "id": 31, "properties": { "prompt": "width", "format": "integer", "frame": { "width": 70 }, "actionID": "sips.update.preview" } },
                   { "type": "Text", "id": 33, "properties": { "text": "x", "foregroundStyle": "secondary" } },
-                  { "type": "TextField", "id": 32, "properties": { "prompt": "height", "frame": { "width": 70 }, "actionID": "sips.update.preview" } }
+                  { "type": "TextField", "id": 32, "properties": { "prompt": "height", "format": "integer", "frame": { "width": 70 }, "actionID": "sips.update.preview" } }
                 ]
               },
               {
@@ -308,6 +308,7 @@
                     "id": 51,
                     "properties": {
                       "text": "80",
+                      "format": "integer",
                       "frame": { "width": 50 },
                       "actionID": "sips.update.preview"
                     }
