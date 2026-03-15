@@ -508,5 +508,10 @@
                 <userDefinedRuntimeAttribute type="string" keyPath="commandFilePath" value="Command.plist"/>
             </userDefinedRuntimeAttributes>
         </customObject>
+        <customObject id="gqQ-i7-D4I" customClass="OMCMainMenuController">
+            <userDefinedRuntimeAttributes>
+                <userDefinedRuntimeAttribute type="string" keyPath="commandFilePath" value="Command.plist"/>
+            </userDefinedRuntimeAttributes>
+        </customObject>
     </objects>
 </document>
