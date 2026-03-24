@@ -196,7 +196,6 @@ fi
 # Handle resize mode — show/hide fields, convert pixel<->percent values
 handle_resize_mode_change
 
-echo "[DEBUG] Updating preview for: $selected_path"
 
 # Output format (default to png for preview)
 output_format="$OMC_ACTIONUI_VIEW_13_VALUE"
@@ -214,12 +213,10 @@ output_file="$temp_preview_dir/${name_without_ext}_preview.${output_format}"
 # Build and execute sips command (pass image path for percentage calculation)
 sips_args=$(build_sips_args "$selected_path")
 
-echo "[DEBUG] Running: /usr/bin/sips $sips_args --out \"$output_file\" \"$selected_path\""
 output=$(/usr/bin/sips $sips_args --out "$output_file" "$selected_path" 2>&1)
 exit_code=$?
 
 if [ $exit_code -ne 0 ]; then
-    echo "[DEBUG] Error: $output"
     exit 0
 fi
 
