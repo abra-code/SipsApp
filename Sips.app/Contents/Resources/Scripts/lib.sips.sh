@@ -39,11 +39,22 @@ get_image_dimensions() {
     _orig_width=""
     _orig_height=""
     if [ -n "$img" ] && [ -e "$img" ]; then
-        local sips_out
-        sips_out=$(/usr/bin/sips -g pixelWidth -g pixelHeight "$img" 2>/dev/null)
+        local sips_out=$(/usr/bin/sips -g pixelWidth -g pixelHeight "$img" 2>/dev/null)
         _orig_width=$(echo "$sips_out" | /usr/bin/awk '/pixelWidth/{print $2}')
         _orig_height=$(echo "$sips_out" | /usr/bin/awk '/pixelHeight/{print $2}')
     fi
+}
+
+# Get list of readable image extensions from sips --formats
+get_readable_extensions() {
+    local exts=$(/usr/bin/sips --formats 2>/dev/null | /usr/bin/awk '
+        NR > 2 && $2 != "--" {
+            ext = $2
+            if (ext == "jpeg") ext = "jpg"
+            print ext
+        }
+    ' | /usr/bin/sort -u | /usr/bin/tr '\n' '|')
+    echo "${exts%|}"
 }
 
 # Function to add image files to the table
@@ -51,6 +62,11 @@ get_image_dimensions() {
 add_files_to_table() {
     local new_paths="$1"
     local buffer=""
+    
+    # Get readable extensions from sips
+    local readable_exts=$(get_readable_extensions)
+    # Remove trailing pipe for case statement
+    readable_exts="${readable_exts%|}"
     
     # Get existing file paths from the table
     local existing_paths="$OMC_ACTIONUI_TABLE_10_COLUMN_2_ALL_ROWS"
@@ -69,24 +85,39 @@ add_files_to_table() {
     # Add new files/directories
     while IFS= read -r file_path; do
         if [ -d "$file_path" ]; then
-            # It's a directory - search recursively for supported image files
-            local all_images="$(/usr/bin/find "$file_path" -type f \
-                \( -iname "*.jpg" -o -iname "*.jpeg" -o -iname "*.png" -o -iname "*.tiff" -o -iname "*.tif" \
-                -o -iname "*.gif" -o -iname "*.bmp" -o -iname "*.heic" -o -iname "*.heif" \
-                -o -iname "*.webp" -o -iname "*.psd" -o -iname "*.pdf" -o -iname "*.jp2" \) \
-                ! -path "*/.*" 2>/dev/null)"
+            # It's a directory - get all files and filter by extension
+            local all_files=$("/usr/bin/find" "$file_path" -type f ! -path "*/.*" 2>/dev/null)
             
-            for found_file in $all_images; do
+            while IFS= read -r found_file; do
                 local filename="$("/usr/bin/basename" "$found_file")"
-                buffer="${buffer}${filename}	${found_file}
+                local ext="${filename##*.}"
+                local ext_to_check="$ext"
+                if [ "$ext" = "jpeg" ]; then
+                    ext_to_check="jpg"
+                elif [ "$ext" = "jpg" ]; then
+                    ext_to_check="jpeg"
+                fi
+                case "|${readable_exts}|" in
+                    *"|${ext}|"*|*"|${ext_to_check}|"*)
+                        buffer="${buffer}${filename}	${found_file}
 "
-            done
+                    ;;
+                esac
+            done <<< "$all_files"
             
         elif [ -e "$file_path" ]; then
-            # It's a file - check if it's an image
+            # It's a file - check if it's an image using supported extensions
             local filename="$("/usr/bin/basename" "$file_path")"
-            case "${filename##*.}" in
-                jpg|jpeg|png|tiff|tif|gif|bmp|heic|heif|webp|psd|pdf|jp2)
+            local ext="${filename##*.}"
+            # Handle jpeg/jpg variation
+            local ext_to_check="$ext"
+            if [ "$ext" = "jpeg" ]; then
+                ext_to_check="jpg"
+            elif [ "$ext" = "jpg" ]; then
+                ext_to_check="jpeg"
+            fi
+            case "|${readable_exts}|" in
+                *"|${ext}|"*|*"|${ext_to_check}|"*)
                     buffer="${buffer}${filename}	${file_path}
 "
                     ;;
@@ -207,8 +238,7 @@ build_sips_command() {
     local input_file="$1"
     local output_file="$2"
     
-    local sips_args
-    sips_args=$(build_sips_args)
+    local sips_args=$(build_sips_args)
     
     # Add output path
     sips_args="$sips_args --out $output_file"
