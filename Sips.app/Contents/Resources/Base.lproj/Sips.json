@@ -30,7 +30,9 @@
           "columns": ["Image"],
           "widths": [230],
           "actionID": "sips.files.selection.changed",
-          "doubleClickActionID": "sips.files.double.click"
+          "doubleClickActionID": "sips.files.double.click",
+          "onDropTypes": ["public.file-url", "public.folder"],
+          "onDropActionID": "sips.files.drop"
         }
       },
       {
