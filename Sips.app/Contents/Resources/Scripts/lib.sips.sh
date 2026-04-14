@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/bin/sh
 # lib.sips.sh - Shared functions and variables for Sips
 
 # Control IDs
@@ -73,21 +73,27 @@ add_files_to_table() {
     
     # Add existing files first
     if [ -n "$existing_paths" ]; then
+        local tmp_existing="$(/usr/bin/mktemp "${TMPDIR:-/tmp}/sips.XXXXXX")"
+        printf '%s\n' "$existing_paths" > "$tmp_existing"
         while IFS= read -r file_path; do
             if [ -n "$file_path" ]; then
                 local filename="$("/usr/bin/basename" "$file_path")"
                 buffer="${buffer}${filename}	${file_path}
 "
             fi
-        done <<< "$existing_paths"
+        done < "$tmp_existing"
+        /bin/rm -f "$tmp_existing"
     fi
     
     # Add new files/directories
+    local tmp_new="$(/usr/bin/mktemp "${TMPDIR:-/tmp}/sips.XXXXXX")"
+    printf '%s\n' "$new_paths" > "$tmp_new"
     while IFS= read -r file_path; do
         if [ -d "$file_path" ]; then
             # It's a directory - get all files and filter by extension
-            local all_files=$("/usr/bin/find" "$file_path" -type f ! -path "*/.*" 2>/dev/null)
-            
+            local tmp_files="$(/usr/bin/mktemp "${TMPDIR:-/tmp}/sips.XXXXXX")"
+            /usr/bin/find "$file_path" -type f ! -path "*/.*" -print > "$tmp_files" 2>/dev/null
+
             while IFS= read -r found_file; do
                 local filename="$("/usr/bin/basename" "$found_file")"
                 local ext="${filename##*.}"
@@ -103,7 +109,8 @@ add_files_to_table() {
 "
                     ;;
                 esac
-            done <<< "$all_files"
+            done < "$tmp_files"
+            /bin/rm -f "$tmp_files"
             
         elif [ -e "$file_path" ]; then
             # It's a file - check if it's an image using supported extensions
@@ -123,13 +130,14 @@ add_files_to_table() {
                     ;;
             esac
         fi
-    done <<< "$new_paths"
-    
+    done < "$tmp_new"
+    /bin/rm -f "$tmp_new"
+
     # Sort, remove duplicates, and set table rows
     if [ -n "$buffer" ]; then
         printf "%s" "$buffer" | /usr/bin/sort -u | "$dialog_tool" "$window_uuid" ${TABLE_ID} omc_table_set_rows_from_stdin
     else
-        "$dialog_tool" "$window_uuid" ${TABLE_ID} omc_table_set_rows_from_stdin <<< ""
+        "$dialog_tool" "$window_uuid" ${TABLE_ID} omc_table_remove_all_rows
     fi
 }
 
@@ -174,11 +182,16 @@ build_sips_args() {
             # The width field contains a percentage value — compute absolute pixels per image
             if [ -n "$width" ] && [ -n "$image_path" ] && [ -e "$image_path" ]; then
                 local percent="$width"
-                if ! [[ "$percent" =~ ^[0-9]+$ ]] || [ "$percent" -lt 1 ]; then
-                    percent=100
-                elif [ "$percent" -gt 500 ]; then
-                    percent=500
-                fi
+                case "$percent" in
+                    '' | *[!0-9]*)
+                        percent=100 ;;
+                    *)
+                        if [ "$percent" -lt 1 ]; then
+                            percent=100
+                        elif [ "$percent" -gt 500 ]; then
+                            percent=500
+                        fi ;;
+                esac
 
                 get_image_dimensions "$image_path"
                 if [ -n "$_orig_width" ] && [ -n "$_orig_height" ] && [ "$_orig_width" -gt 0 ]; then
@@ -213,15 +226,16 @@ build_sips_args() {
         
         if [ -n "$quality" ] && [ "$quality" != "default" ]; then
             # Validate quality - default to 80 if not a number, clamp to 1-100
-            if [[ "$quality" =~ ^[0-9]+$ ]]; then
-                if [ "$quality" -gt 100 ]; then
-                    quality=100
-                elif [ "$quality" -lt 1 ]; then
-                    quality=1
-                fi
-            else
-                quality=80
-            fi
+            case "$quality" in
+                '' | *[!0-9]*)
+                    quality=80 ;;
+                *)
+                    if [ "$quality" -gt 100 ]; then
+                        quality=100
+                    elif [ "$quality" -lt 1 ]; then
+                        quality=1
+                    fi ;;
+            esac
             sips_args="$sips_args -s formatOptions $quality"
         elif [ -n "$compression" ] && [ "$compression" != "default" ]; then
             sips_args="$sips_args -s formatOptions $compression"

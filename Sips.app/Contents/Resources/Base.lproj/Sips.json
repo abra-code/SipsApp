@@ -158,20 +158,18 @@
         },
         "children": [
           {
-            "type": "ScrollView",
+            "type": "Image",
+            "id": 20,
             "properties": {
-              "axis": "both"
-            },
-            "content": {
-              "type": "Image",
-              "id": 20,
-              "properties": {
-                "resizable": true,
-                "scaleMode": "fit",
-                "border": {
-                  "color": "#80808040",
-                  "width": 1.0
-                }
+              "resizable": true,
+              "scaleMode": "fit",
+              "frame": {
+                "maxWidth": 99999,
+                "maxHeight": 99999
+              },
+              "border": {
+                "color": "#80808040",
+                "width": 1.0
               }
             }
           }
