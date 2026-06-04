@@ -162,7 +162,7 @@
             "id": 20,
             "properties": {
               "resizable": true,
-              "scaleMode": "fit",
+              "contentMode": "fit",
               "frame": {
                 "maxWidth": 99999,
                 "maxHeight": 99999
@@ -269,7 +269,7 @@
                       "title": "Format",
                       "pickerStyle": "menu",
                       "options": [
-                        {"title": "JPEG", "tag": "jpeg"},
+                        {"title": "JPEG", "tag": "jpeg"}
                        ],
                       "actionID": "sips.format.changed"
                     }
