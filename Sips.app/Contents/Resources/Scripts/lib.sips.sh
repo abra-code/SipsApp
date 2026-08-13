@@ -57,12 +57,53 @@ get_readable_extensions() {
     echo "${exts%|}"
 }
 
+# Show a single consolidated alert for files skipped because their type is not
+# a supported image. Aggregates so a multi-file drop produces one dialog, not one
+# per file.
+# Arguments: count, newline-separated list of file names
+notify_unsupported_files() {
+    local count="$1"
+    local names="$2"
+    local alert_tool="$OMC_OMC_SUPPORT_PATH/alert"
+
+    # Cap the listed names so a large drop does not produce a giant dialog
+    local max_list=10
+    local shown="$(printf '%s\n' "$names" | /usr/bin/head -n "$max_list")"
+    local extra=$(( count - max_list ))
+
+    local header
+    if [ "$count" -eq 1 ]; then
+        header="1 file was skipped because it is not a supported image:"
+    else
+        header="$count files were skipped because they are not supported images:"
+    fi
+
+    local message="$header
+$shown"
+    if [ "$extra" -gt 0 ]; then
+        message="$message
+...and $extra more"
+    fi
+
+    "$alert_tool" --level caution --title "Sips" "$message"
+}
+
 # Function to add image files to the table
 # Arguments: newline-separated list of file/directory paths to add
 add_files_to_table() {
     local new_paths="$1"
     local buffer=""
-    
+    # Track individually added files skipped for unsupported type, so we can
+    # warn once at the end instead of one alert per file.
+    local unsupported_count=0
+    local unsupported_names=""
+
+    # Loop variables, declared so they stay in this function. The loops below
+    # read from a file redirect rather than a pipeline, so they run in the current
+    # shell and would otherwise assign at global scope.
+    local file_path
+    local found_file
+
     # Get readable extensions from sips
     local readable_exts=$(get_readable_extensions)
     # Remove trailing pipe for case statement
@@ -96,7 +137,8 @@ add_files_to_table() {
 
             while IFS= read -r found_file; do
                 local filename="$("/usr/bin/basename" "$found_file")"
-                local ext="${filename##*.}"
+                # Lowercase the extension so uppercase ones (e.g. .JPG) match
+                local ext="$(printf '%s' "${filename##*.}" | /usr/bin/tr '[:upper:]' '[:lower:]')"
                 local ext_to_check="$ext"
                 if [ "$ext" = "jpeg" ]; then
                     ext_to_check="jpg"
@@ -115,7 +157,8 @@ add_files_to_table() {
         elif [ -e "$file_path" ]; then
             # It's a file - check if it's an image using supported extensions
             local filename="$("/usr/bin/basename" "$file_path")"
-            local ext="${filename##*.}"
+            # Lowercase the extension so uppercase ones (e.g. .JPG) match
+            local ext="$(printf '%s' "${filename##*.}" | /usr/bin/tr '[:upper:]' '[:lower:]')"
             # Handle jpeg/jpg variation
             local ext_to_check="$ext"
             if [ "$ext" = "jpeg" ]; then
@@ -128,6 +171,15 @@ add_files_to_table() {
                     buffer="${buffer}${filename}	${file_path}
 "
                     ;;
+                *)
+                    unsupported_count=$(( unsupported_count + 1 ))
+                    if [ -z "$unsupported_names" ]; then
+                        unsupported_names="$filename"
+                    else
+                        unsupported_names="$unsupported_names
+$filename"
+                    fi
+                    ;;
             esac
         fi
     done < "$tmp_new"
@@ -138,6 +190,11 @@ add_files_to_table() {
         printf "%s" "$buffer" | /usr/bin/sort -u | "$dialog_tool" "$window_uuid" ${TABLE_ID} omc_table_set_rows_from_stdin
     else
         "$dialog_tool" "$window_uuid" ${TABLE_ID} omc_table_remove_all_rows
+    fi
+
+    # Warn once about any individually added files of unsupported type
+    if [ "$unsupported_count" -gt 0 ]; then
+        notify_unsupported_files "$unsupported_count" "$unsupported_names"
     fi
 }
 
