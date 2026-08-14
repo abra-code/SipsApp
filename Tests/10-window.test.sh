@@ -31,17 +31,29 @@ eval "resize_start=\$OMC_ACTIONUI_VIEW_${RESIZE_MODE_PICKER_ID}_VALUE"
 check "the resize picker opens on percentage" "$DEFAULT_RESIZE_MODE" "$resize_start"
 check "it does not open on exact pixels" "no" "$(contains "$resize_start" "exact")"
 
-# The precise defect: an integer-formatted TextField that declares no value
-# renders and reports as 0, and 0 is what sips refuses. So the width field has to
-# declare one. Read from the document rather than from omc_control_defaults,
-# which reads "text" and cannot see a formatted field's "value" - see
-# declared_prop in the test lib.
+# The precise defect: a TextField that declares no value reports as empty, and
+# an empty width is not a size sips will accept. So the width field has to
+# declare one.
 check "the width field declares an opening value" "$DEFAULT_RESIZE_PERCENT" \
-    "$(declared_prop Sips "$WIDTH_FIELD_ID" value)"
+    "$(declared_prop Sips "$WIDTH_FIELD_ID" text)"
 # The positive control for that accessor: an assertion about a declared property
 # is worthless if the reader silently finds nothing for every id.
-check "the declared-property reader works" "integer" \
-    "$(declared_prop Sips "$WIDTH_FIELD_ID" format)"
+check "the declared-property reader works" "percent" \
+    "$(declared_prop Sips "$WIDTH_FIELD_ID" prompt)"
+
+# The second half of the same defect, and the reason these two fields carry no
+# "format". SwiftUI renders an integer-formatted field holding nothing as 0, so
+# the window came up reading 0 x 0 with no image selected, and 0 is what sips
+# refuses. The fields have to be able to show empty, because empty is what they
+# have to say while they are waiting for a selection.
+for _field in "$WIDTH_FIELD_ID" "$HEIGHT_FIELD_ID"; do
+    check "field $_field declares no numeric format" "" \
+        "$(declared_prop Sips "$_field" format)"
+    # The prompt is what stands in the field while it is empty, so it is the
+    # only thing naming what the field is for in that state.
+    check "field $_field declares a prompt to show while it is empty" "yes" \
+        "$([ -n "$(declared_prop Sips "$_field" prompt)" ] && echo yes || echo no)"
+done
 
 # The companion fields open hidden, because percent mode uses neither. Declared
 # in the document rather than left to init, so the window is never briefly wrong.
@@ -85,10 +97,22 @@ check "the width field was never hidden" "no" \
     "$(contains "$(field_hidden "$WIDTH_FIELD_ID")" "true")"
 
 check "init recorded the starting mode for the next mode change" \
-    "$DEFAULT_RESIZE_MODE" "$(cat "$(resize_mode_file)" 2>/dev/null)"
-# The positive control for the resize_mode_file accessor: if it computed the
+    "$DEFAULT_RESIZE_MODE" "$(resize_state mode)"
+# The positive control for the resize_state_file accessor: if it computed the
 # wrong path the check above would compare two empty strings forever.
-check_exists "the state file is where the applet's naming says it is" "$(resize_mode_file)"
+check_exists "the state file is where the applet's naming says it is" "$(resize_state_file)"
+
+# Nothing has been typed in a fresh window, so both pixel fields are the
+# applet's to fill from whatever gets selected. If init recorded them as the
+# user's instead, the first image picked would leave them empty forever.
+check "the width field starts out following the selection" "auto" \
+    "$(resize_state width_source)"
+check "and the height field too" "auto" "$(resize_state height_source)"
+# What init put in the width field, recorded as such. This is the value the next
+# dispatch compares against to decide whether the user has typed anything, so a
+# window that opens without it reads its own 100 as something the user chose.
+check "init recorded the value it wrote to the width field" \
+    "$DEFAULT_RESIZE_PERCENT" "$(resize_state width_last)"
 
 # --------------------------------------------------------------------------
 section "init fills the format picker from sips itself"
@@ -126,6 +150,20 @@ check "the preview shows it"             "$(fixture landscape.png)" "$(ui_value 
 check "and the row's buttons came alive" "1" "$(ui_enabled "$REMOVE_BUTTON_ID")"
 check "reveal too"                       "1" "$(ui_enabled "$REVEAL_BUTTON_ID")"
 check "info too"                         "1" "$(ui_enabled "$INFO_BUTTON_ID")"
+
+# --------------------------------------------------------------------------
+section "a window opened on something that is not an image still opens"
+# --------------------------------------------------------------------------
+# Dropping a text file on the app icon is a normal thing for a user to do by
+# mistake, and there is then no row to select. That is an empty window, not a
+# failed init - the exit status is what the engine reports as an error.
+reset_window
+omc_object "$(fixture notes.txt)"
+omc_run sips.init
+check_status "init succeeded with nothing it could use" 0
+check "the list is empty" "0" "$(file_count)"
+check "nothing was selected" "0" "$(ui_calls "omc_select_row")"
+check "and the preview stayed empty" "" "$(ui_value "$IMAGE_PREVIEW_ID")"
 
 # --------------------------------------------------------------------------
 section "File > Open... seeds a new window through the pasteboard"
@@ -168,11 +206,11 @@ section "closing the window cleans up its per-window scratch"
 # --------------------------------------------------------------------------
 reset_window
 omc_run sips.init
-check_exists "init wrote the resize state file" "$(resize_mode_file)"
+check_exists "init wrote the resize state file" "$(resize_state_file)"
 
 omc_run sips.cancel
 check_status "the cancel handler succeeded" 0
-check_absent "the resize state file is gone" "$(resize_mode_file)"
+check_absent "the resize state file is gone" "$(resize_state_file)"
 check_absent "and the preview directory with it" "$(preview_dir)"
 
 # --------------------------------------------------------------------------

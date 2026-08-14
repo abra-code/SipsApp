@@ -39,3 +39,11 @@ JPEG, PNG, TIFF, GIF, BMP, HEIC, HEICS, WebP, PSD, PDF, JPEG 2000, ICNS, AVIF, D
 3. Select an image to see its preview and info
 4. Adjust resize mode, rotation, flip, output format, and quality
 5. Click **Convert** and pick a destination folder
+
+### Resize sizes
+
+The width and height fields describe the selected image, and they follow it as you click through the list.
+
+Only a size you type is applied to the conversion. Leave the fields alone and every image converts at its own size. Type a size into one and it becomes the rule for every image in the list, and stays put as you click through them, until you empty the field - which hands it back to the selection.
+
+Either way, what the fields show is what the selected image will come out as, and every other image follows the same rule against its own dimensions.

@@ -21,6 +21,12 @@ portrait="$(fixture portrait.png)"     # 60 x 180
 tiny="$(fixture tiny.png)"             # 8 x 4
 out="$OMCTEST_WORK/out.png"
 
+# The builder acts on what the user typed and ignores what the applet worked out
+# from the selected image, so every check on it stands on a claim about which is
+# which. The sections below are about the argument list itself, so they say once
+# that every value in them is the user's.
+typed_resize_fields
+
 # --------------------------------------------------------------------------
 section "the original defect: a zero dimension never reaches sips"
 # --------------------------------------------------------------------------
@@ -49,7 +55,7 @@ section "every field a user can empty or mistype drops its flag"
 # The general form of the same defect. sips refuses a zero or negative
 # dimension, so a field that cannot be used must not produce a flag - the worst
 # outcome allowed is a conversion at the original size.
-for _case in "exact::" "exact:0:0" "exact:abc:def" "exact:-5:-5" "exact:100:" \
+for _case in "exact::" "exact:0:0" "exact:abc:def" "exact:-5:-5" \
              "width:0:" "width::" "width:abc:" \
              "height::0" "height::" "height::x1" \
              "longest:0:" "longest::" "longest: :"; do
@@ -61,11 +67,138 @@ for _case in "exact::" "exact:0:0" "exact:abc:def" "exact:-5:-5" "exact:100:" \
         "$(sips_args_for "$_mode" "$_w" "$_h" "$landscape")"
 done
 
+# One side of an exact size, with the other side unusable, is not the same as
+# nothing asked for: the user did type a width. Resampling that one axis honors
+# it and keeps the file's proportions, which beats silently ignoring it.
+args=$(sips_args_for exact 100 "" "$landscape")
+check "an exact width with no usable height resamples the width" \
+    "--resampleWidth 100" "$args"
+check "sips accepts it" "0" "$(sips_accepts_args "$args" "$landscape" "$out")"
+check "and the aspect ratio is kept" "100x75" "$(dimensions_of "$out")"
+/bin/rm -f "$out"
+
 # The positive control for that whole loop: usable values must still build
 # something, or "builds nothing" is being satisfied by a builder that never
 # builds anything.
 check "a usable exact size does build a flag" "-z 200 100" \
     "$(sips_args_for exact 100 200 "$landscape")"
+
+# --------------------------------------------------------------------------
+section "a size that would flatten the other axis is spelled out instead"
+# --------------------------------------------------------------------------
+# The single-axis flags hand sips one number and let it work out the other, and
+# sips applies no floor to what it works out: 8 x 4 asked for a width of 1 comes
+# to a height of zero, and sips refuses the whole conversion rather than
+# clamping.
+check "sips really does refuse it" "no" \
+    "$(sips_accepts_args "--resampleWidth 1" "$tiny" "$out" | /usr/bin/grep -q '^0$' && echo yes || echo no)"
+/bin/rm -f "$out"
+
+# So the applet asks for both sides itself, floored at 1 - the pair the field is
+# already showing, and the same answer the percent branch reaches when a scale
+# rounds an axis away. The size the user typed is honored either way.
+args=$(sips_args_for width 1 "" "$tiny")
+check "width mode spells the pair out rather than handing over a flag sips refuses" \
+    "-z 1 1" "$args"
+check "and sips accepts what it built" "0" "$(sips_accepts_args "$args" "$tiny" "$out")"
+check "at the size the fields were showing" "1x1" "$(dimensions_of "$out")"
+/bin/rm -f "$out"
+
+check "longest edge does the same" "-z 1 1" "$(sips_args_for longest 1 "" "$tiny")"
+# Height mode collapses on a TALL image, not on the wide one above: it is the
+# axis sips is left to work out that runs out of pixels. 60 x 180 asked for a
+# height of 1 comes to a width of zero, while the same request against 8 x 4
+# leaves a perfectly good 2 - so the wide fixture would have passed this check
+# with the substitution removed.
+check "height mode too, on an image tall enough for it" "-z 1 1" \
+    "$(sips_args_for height "" 1 "$portrait")"
+check "and the same height against a wide image resamples as usual" \
+    "--resampleHeight 1" "$(sips_args_for height "" 1 "$tiny")"
+# Exact pixels reaches the same flags whenever only one axis was asked for.
+set_resize_state exact typed auto 0 0
+check "and exact pixels, where only one axis was asked for" "-z 1 1" \
+    "$(sips_args_for exact 1 "" "$tiny")"
+typed_resize_fields
+
+# The negative control for the substitution: one more pixel and the other axis
+# survives, so the ordinary resample flag must come back. Otherwise "-z 1 1" is
+# being produced by a builder that has stopped measuring.
+args=$(sips_args_for width 2 "" "$tiny")
+check "a size that leaves a pixel on the other axis resamples normally" \
+    "--resampleWidth 2" "$args"
+check "and sips accepts that" "0" "$(sips_accepts_args "$args" "$tiny" "$out")"
+check "at the size it promised" "2x1" "$(dimensions_of "$out")"
+/bin/rm -f "$out"
+
+# With no file to measure there is nothing to substitute against, and the same
+# size against a bigger image is perfectly ordinary, so the resample flag stands.
+check "an unmeasurable image gets the ordinary flag" \
+    "--resampleWidth 1" "$(sips_args_for width 1 "" "")"
+
+# --------------------------------------------------------------------------
+section "a number the applet worked out is not an instruction"
+# --------------------------------------------------------------------------
+# The difference the whole mechanism exists to make. The fields fill themselves
+# in from the SELECTED image; carrying those numbers into the conversion would
+# force one file's dimensions onto every other file, and would re-aim the batch
+# every time the user clicked a different row. Only what the user typed counts.
+#
+# The state file is written directly here: what these checks are about is the
+# builder's reading of it, not the route the window took to get there.
+set_resize_state exact auto auto 400 300
+check "fields the applet filled in build no resize at all" "" \
+    "$(sips_args_for exact 400 300 "$landscape")"
+
+# The positive control: the same numbers, recorded as the user's, must build the
+# resize. Otherwise "builds nothing" is being satisfied by a builder that has
+# stopped working.
+set_resize_state exact typed typed 400 300
+check "the same numbers typed by the user do build one" "-z 300 400" \
+    "$(sips_args_for exact 400 300 "$landscape")"
+
+# A width typed against a height the applet derived: the width is the
+# instruction, and the derived height must not turn into one.
+set_resize_state exact typed auto 800 600
+check "a typed width with a derived height resamples the width" \
+    "--resampleWidth 800" "$(sips_args_for exact 800 600 "$landscape")"
+set_resize_state exact auto typed 800 600
+check "and the same the other way round" \
+    "--resampleHeight 600" "$(sips_args_for exact 800 600 "$landscape")"
+
+# The single-axis modes have the same rule, one field at a time.
+set_resize_state width auto auto 400 300
+check "a width the applet filled in builds nothing" "" \
+    "$(sips_args_for width 400 300 "$landscape")"
+set_resize_state longest auto auto 400 300
+check "a longest edge the applet filled in builds nothing" "" \
+    "$(sips_args_for longest 400 "" "$landscape")"
+set_resize_state height auto auto 400 300
+check "a height the applet filled in builds nothing" "" \
+    "$(sips_args_for height "" 300 "$landscape")"
+
+# A value that reached the builder before any handler recorded it - pressing
+# Convert straight after typing - is still the user's. The state file says the
+# applet last wrote 400; the field says something else; only the user could have
+# put it there.
+set_resize_state width auto auto 400 300
+check "a size typed but not yet recorded still counts as the user's" \
+    "--resampleWidth 250" "$(sips_args_for width 250 "" "$landscape")"
+
+# That inference needs something to compare against. With the state file gone -
+# TMPDIR is purged, and the file is only rewritten when a resize control is
+# touched, so a window left open long enough gets there - the applet's own
+# writes are gone from the record too, and every field looks like it holds
+# something it never wrote. Reading that as "the user asked for this" would take
+# the dimensions of whichever image happened to be selected and force them on
+# the whole batch, which is the defect this section exists to prevent, arrived
+# at from the other side.
+forget_resize_state
+check "with no record at all, nothing counts as asked for" "" \
+    "$(sips_args_for exact 400 300 "$landscape")"
+check "not in the single-axis modes either" "" \
+    "$(sips_args_for width 400 "" "$landscape")"
+
+typed_resize_fields
 
 # --------------------------------------------------------------------------
 section "exact pixels asks sips for exactly those pixels"
@@ -204,25 +337,199 @@ omc_run sips.update.preview
 check "the switch to exact left the typed width alone" "" "$(ui_value "$WIDTH_FIELD_ID")"
 check "and the derived height alone"                   "" "$(ui_value "$HEIGHT_FIELD_ID")"
 
-# Re-dispatching on the same mode does nothing at all: the switcher compares
-# against the mode it recorded last time and returns early. Worth pinning,
-# because it is also why the positive control below cannot simply re-run.
+# Re-dispatching on the same mode writes nothing. Not because the handler stops
+# early - it recomputes the fields on every dispatch - but because the values it
+# arrives at are the ones already standing there, and the field writers suppress
+# a write that would change nothing. Worth pinning: it is why the positive
+# control below cannot simply re-run.
 ui_reset
 omc_run sips.update.preview
 check "re-entering the same mode writes nothing" "" "$(ui_value "$WIDTH_FIELD_ID")"
 
 # The positive control, without which the pair above is satisfied by a handler
-# that writes nothing ever. A real mode change, with one field left unusable:
-# the switcher must reseed both from the image.
-omc_control "$RESIZE_MODE_PICKER_ID" width
-omc_run sips.update.preview
-omc_control "$WIDTH_FIELD_ID" 200
-omc_control "$HEIGHT_FIELD_ID" 0
-omc_control "$RESIZE_MODE_PICKER_ID" exact
+# that writes nothing ever. Emptying the field is how the user hands it back, so
+# it is also the one thing that must bring the reseed on.
+omc_control "$WIDTH_FIELD_ID" ""
 ui_reset
 omc_run sips.update.preview
-check "but an unusable height does bring the reseed back" "400" "$(ui_value "$WIDTH_FIELD_ID")"
-check "for both fields"                                   "300" "$(ui_value "$HEIGHT_FIELD_ID")"
+check "emptying the width field fills it from the image again" "400" \
+    "$(ui_value "$WIDTH_FIELD_ID")"
+check "and the height follows it"                             "300" \
+    "$(ui_value "$HEIGHT_FIELD_ID")"
+check "the applet has the field back" "auto" "$(resize_state width_source)"
+# Said out loud, because nothing on screen distinguishes a field that follows the
+# selection from one that does not.
+check "and the user was told what changed" "yes" \
+    "$(contains "$(status_text)" "Following the selected image again")"
+
+# --------------------------------------------------------------------------
+section "a typed size is a rule for the batch and does not move"
+# --------------------------------------------------------------------------
+# The question this whole mechanism answers: with several images in the list and
+# one size in the fields, does the size belong to the selected image or to the
+# batch? Both, depending on where it came from - and this is the "typed" half.
+reset_window
+omc_run sips.init
+select_file "$landscape"
+omc_control "$RESIZE_MODE_PICKER_ID" exact
+omc_run sips.update.preview
+
+omc_control "$WIDTH_FIELD_ID" 800
+omc_run sips.update.preview
+check "the typed width is recorded as the user's" "typed" "$(resize_state width_source)"
+check "and the user was told it now applies to every image" "yes" \
+    "$(contains "$(status_text)" "Fixed for every image")"
+# The conversion has to draw the same distinction the fields do, or the whole
+# mechanism stops at the picker: the width was asked for, the height was worked
+# out, so only the width is an instruction.
+check "the batch resamples the typed width and leaves the derived height out" \
+    "--resampleWidth 800" "$(sips_args_for exact 800 600 "$landscape")"
+# The other field is still the applet's, so it keeps the image's proportions
+# rather than snapping to its original height, which would stretch the result.
+check "the height came along in proportion" "600" "$(ui_value "$HEIGHT_FIELD_ID")"
+
+# Now the selection moves. The typed width is the whole point: it must not.
+#
+# Only the height is bridged. bridge_field replays the last value the APPLET
+# wrote, and the applet did not write the width - the user did, and the harness
+# is already carrying that. Bridging it too would replace the typed 800 with the
+# 400 an earlier dispatch put there and quietly take the section's subject away.
+bridge_field "$HEIGHT_FIELD_ID"
+select_file "$portrait"
+ui_reset
+omc_run sips.files.selection.changed
+check_status "the selection handler succeeded" 0
+check "the typed width stayed where the user put it" "" "$(ui_value "$WIDTH_FIELD_ID")"
+check "and it is still recorded as theirs" "typed" "$(resize_state width_source)"
+# 60 x 180 at a fixed 800 wide: the height the applet owns tracks the new image.
+check "the height it owns moved to the new image" "2400" "$(ui_value "$HEIGHT_FIELD_ID")"
+
+# --------------------------------------------------------------------------
+section "the side the applet works out agrees with what sips will produce"
+# --------------------------------------------------------------------------
+# The derived field is a promise about the output, so it has to be computed the
+# way sips computes it. sips truncates: 8 x 4 resampled to 5 wide comes out 2
+# high, and a field saying 3 would be the applet describing a result it is not
+# going to get. The claim is checked against the converted file rather than
+# against a second copy of the arithmetic.
+reset_window
+omc_run sips.init
+select_file "$tiny"
+omc_control "$RESIZE_MODE_PICKER_ID" width
+omc_run sips.update.preview
+omc_control "$WIDTH_FIELD_ID" 5
+omc_run sips.update.preview
+
+shown="$(ui_value "$HEIGHT_FIELD_ID")"
+check "the applet says the other side will be 2" "2" "$shown"
+args=$(sips_args_for width 5 "" "$tiny")
+check "sips accepts what that builds" "0" "$(sips_accepts_args "$args" "$tiny" "$out")"
+check "and the file it wrote is the size the field promised" "5x${shown}" \
+    "$(dimensions_of "$out")"
+/bin/rm -f "$out"
+
+# --------------------------------------------------------------------------
+section "a size committed by clicking another image is still the user's"
+# --------------------------------------------------------------------------
+# The dispatch the whole pin mechanism was built for. A text field commits on
+# focus loss, so typing a size and clicking straight onto another row delivers
+# the size on the SELECTION's dispatch, not on the field's own action. A refresh
+# that did not look first would overwrite it with the newly selected image's
+# dimensions, and the user would watch their size disappear as they clicked.
+reset_window
+omc_run sips.init
+select_file "$landscape"
+omc_control "$RESIZE_MODE_PICKER_ID" exact
+omc_run sips.update.preview
+bridge_field "$WIDTH_FIELD_ID"
+bridge_field "$HEIGHT_FIELD_ID"
+
+omc_control "$WIDTH_FIELD_ID" 900
+select_file "$portrait"
+ui_reset
+omc_run sips.files.selection.changed
+check_status "the selection handler succeeded" 0
+check "the width typed on the way out was noticed" "typed" \
+    "$(resize_state width_source)"
+check "and not overwritten by the newly selected image" "" \
+    "$(ui_value "$WIDTH_FIELD_ID")"
+# 60 x 180 at a fixed 900 wide.
+check "the height it owns moved to that image" "2700" "$(ui_value "$HEIGHT_FIELD_ID")"
+check "and the selection handler is the one that said so" "yes" \
+    "$(contains "$(status_text)" "Fixed for every image")"
+
+# --------------------------------------------------------------------------
+section "a field the applet owns follows the selection"
+# --------------------------------------------------------------------------
+# The defect as reported: the pixel fields showed the size of nothing at all and
+# went on showing it however the selection changed.
+reset_window
+omc_run sips.init
+select_file "$landscape"
+omc_control "$RESIZE_MODE_PICKER_ID" exact
+omc_run sips.update.preview
+check "the fields opened on the selected image" "400" "$(ui_value "$WIDTH_FIELD_ID")"
+
+bridge_field "$WIDTH_FIELD_ID"
+bridge_field "$HEIGHT_FIELD_ID"
+select_file "$portrait"
+ui_reset
+omc_run sips.files.selection.changed
+check "the width field moved to the newly selected image" "60" \
+    "$(ui_value "$WIDTH_FIELD_ID")"
+check "and the height field with it"                      "180" \
+    "$(ui_value "$HEIGHT_FIELD_ID")"
+# Nothing changed hands here, so the status area has no business saying anything.
+check "and nothing was announced" "no" \
+    "$(contains "$(status_text)" "Fixed for every image")"
+
+# The single-axis modes describe the selected image too, each on its own axis.
+for _case in "width:60" "longest:180" "height:180"; do
+    _mode=${_case%%:*}
+    _expected=${_case#*:}
+    reset_window
+    omc_run sips.init
+    select_file "$landscape"
+    omc_control "$RESIZE_MODE_PICKER_ID" "$_mode"
+    omc_run sips.update.preview
+    bridge_field "$WIDTH_FIELD_ID"
+    bridge_field "$HEIGHT_FIELD_ID"
+    select_file "$portrait"
+    ui_reset
+    omc_run sips.files.selection.changed
+    if [ "$_mode" = "height" ]; then
+        check "$_mode mode followed the selection" "$_expected" "$(ui_value "$HEIGHT_FIELD_ID")"
+    else
+        check "$_mode mode followed the selection" "$_expected" "$(ui_value "$WIDTH_FIELD_ID")"
+    fi
+done
+
+# --------------------------------------------------------------------------
+section "with nothing selected the fields are empty, not zero"
+# --------------------------------------------------------------------------
+# An empty field builds no flag, so the batch converts at each file's own size.
+# A field reading 0 was the original defect: it looks like a size, it is the one
+# size sips refuses, and it made every conversion fail silently.
+reset_window
+omc_run sips.init
+select_file "$landscape"
+omc_control "$RESIZE_MODE_PICKER_ID" exact
+omc_run sips.update.preview
+# Both fields have a real size to lose. Without this the checks below read "" for
+# a field that was simply never written and would pass on an applet that does
+# nothing at all.
+check "the width field held the image's width"  "400" "$(ui_value "$WIDTH_FIELD_ID")"
+check "and the height field its height"         "300" "$(ui_value "$HEIGHT_FIELD_ID")"
+bridge_field "$WIDTH_FIELD_ID"
+bridge_field "$HEIGHT_FIELD_ID"
+
+clear_selection
+ui_reset
+omc_run sips.files.selection.changed
+check "the width field emptied with the selection"  "" "$(ui_value "$WIDTH_FIELD_ID")"
+check "and the height field with it"                "" "$(ui_value "$HEIGHT_FIELD_ID")"
+check "so the builder asks for no resize at all" "" \
+    "$(sips_args_for exact "$(ui_value "$WIDTH_FIELD_ID")" "$(ui_value "$HEIGHT_FIELD_ID")" "$landscape")"
 
 # --------------------------------------------------------------------------
 section "a percentage cannot escape into a mode that means pixels"
@@ -263,6 +570,28 @@ for _mode in width longest; do
     omc_run sips.update.preview
     check "$_mode mode cleared the stale percentage too" "" "$(ui_value "$WIDTH_FIELD_ID")"
 done
+
+# The same leak by a different route. The state file lives in TMPDIR, which the
+# system purges, and it is only rewritten when a resize control is touched - so
+# a window left open for days reaches its next mode switch with no record of
+# where it came from. An unrecognized previous mode is the percent case with
+# less information, not more: the number standing in the field is then of
+# unknown unit, and guessing "pixels" is how 250 % becomes 250 px.
+reset_window
+omc_run sips.init
+select_file "$landscape"
+omc_control "$RESIZE_MODE_PICKER_ID" percent
+omc_run sips.update.preview
+omc_control "$WIDTH_FIELD_ID" 250
+
+forget_resize_state
+clear_selection
+omc_control "$RESIZE_MODE_PICKER_ID" exact
+omc_run sips.update.preview
+check "a lost state file does not turn a percentage into pixels" "" \
+    "$(ui_value "$WIDTH_FIELD_ID")"
+check "and the field went back to the applet rather than being read as typed" \
+    "auto" "$(resize_state width_source)"
 
 # --------------------------------------------------------------------------
 section "the resize picker responds before any image is in the list"

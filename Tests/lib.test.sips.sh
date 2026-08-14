@@ -223,16 +223,16 @@ bridge_field() { omc_control "$1" "$(ui_value "$1")"; }
 
 # A property as the ActionUI DOCUMENT declares it, before any handler runs.
 #
-# omc_control_defaults cannot answer this for the resize fields: they are
-# format: "integer" TextFields, whose declared value lives in "value" rather
-# than "text" (the ActionUI TextField schema: "Used instead of text when format
-# is set"), and the harness's default extraction reads "text". So the one
-# property this suite most needs to pin - the width field's opening 100 - is
-# invisible to omc_control_defaults and has to be read from the document.
+# omc_control_defaults answers for values, but not for the properties around
+# them - hidden, prompt, format - and the resize fields are as much about those
+# as about what they hold. It is also the more direct assertion for a value:
+# what the field declares IS what the window shows before init writes anything,
+# and a field declaring nothing is what produced the original 0 x 0.
 #
-# That is not a workaround, it is the more direct assertion: what the field
-# declares IS what the window shows before init writes anything, and a field
-# declaring nothing is what produced the original 0 x 0.
+# The pixel fields deliberately declare no "format". An integer-formatted
+# SwiftUI TextField has no way to show an empty value - it reports and renders
+# one as 0 - and empty is a state this applet needs: it is how a field says it
+# is waiting for a selection rather than demanding a size of zero.
 declared_prop() { # <document-name> <view-id> <property> -> declared value, or ""
     /usr/bin/python3 - \
         "$OMC_APP_BUNDLE_PATH/Contents/Resources/Base.lproj/$1.json" "$2" "$3" <<'PY'
@@ -268,7 +268,40 @@ PY
 # than hardcoding a path - so a change to the applet's naming shows up as a
 # missing file rather than as a test quietly asserting about a file nobody
 # writes.
-resize_mode_file() { printf '%s' "${TMPDIR:-/tmp}/sips_resize_mode_${OMC_ACTIONUI_WINDOW_UUID}.txt"; }
+resize_state_file() { printf '%s' "${TMPDIR:-/tmp}/sips_resize_state_${OMC_ACTIONUI_WINDOW_UUID}.txt"; }
+
+# One field out of the state file, by its key. The file is the applet's memory
+# between dispatches - the mode it was last in, and whether each pixel field is
+# following the selection or holding a number the user typed - so a check about
+# what the applet will do NEXT time is a check about this.
+resize_state() { # <key> -> value, or "" when unrecorded
+    /usr/bin/sed -n "s/^$1=//p" "$(resize_state_file)" 2>/dev/null
+}
+
+# Write the state file directly, to set up a check about what the applet does
+# NEXT without driving a whole window into that state first. Chiefly for the
+# argument builder, which asks the state file whether a number was typed by the
+# user or derived by the applet from the selected image.
+set_resize_state() { # <mode> <width_source> <height_source> <width_last> <height_last>
+    printf 'mode=%s\nwidth_source=%s\nheight_source=%s\nwidth_last=%s\nheight_last=%s\n' \
+        "$1" "$2" "$3" "$4" "$5" > "$(resize_state_file)"
+}
+
+# Both pixel fields hold numbers the user typed. The premise most
+# argument-builder checks run under, stated rather than inherited from whatever
+# an earlier file left in TMPDIR. The recorded values are left empty because a
+# field the state file calls the user's is theirs whatever it holds.
+typed_resize_fields() { # [mode]
+    set_resize_state "${1:-exact}" typed typed "" ""
+}
+
+# Take the state file away, the way TMPDIR being purged does under a window that
+# has been open for days. NOT the same as "nothing was typed": the applet's own
+# writes are gone from the record too, so what this sets up is an applet that
+# knows nothing about the numbers on its screen.
+forget_resize_state() {
+    /bin/rm -f "$(resize_state_file)"
+}
 preview_dir() { printf '%s' "${TMPDIR:-/tmp}/sips_preview_${OMC_ACTIONUI_WINDOW_UUID}"; }
 
 # The Open... handoff key is global rather than per-window - it has to be, since
@@ -286,7 +319,7 @@ reset_window() {
     omc_control_defaults Sips
     pb_open_paths set "" >/dev/null 2>&1
     omc_object ""
-    /bin/rm -f "$(resize_mode_file)"
+    /bin/rm -f "$(resize_state_file)"
     /bin/rm -rf "$(preview_dir)"
     # ui_reset deletes unknown_ids.log, suspect_writes.log and errors.log, so a
     # single check at the end of the file would only ever see the last section

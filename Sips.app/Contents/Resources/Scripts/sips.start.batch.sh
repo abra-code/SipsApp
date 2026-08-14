@@ -39,6 +39,14 @@ set_status "Converting ${#files[@]} file(s)..."
 # Get resize mode for percentage handling
 resize_mode="$OMC_ACTIONUI_VIEW_30_VALUE"
 
+# A percentage typed and committed by the Convert click itself has not been past
+# the preview handler, so it is corrected here as well - the builder caps it
+# either way, and a batch scaled by 500 % beside a field still reading 9999 is
+# the applet misreporting what it did.
+if [ "$resize_mode" = "percent" ]; then
+    correct_percent_field
+fi
+
 # Collect errors and results
 errors=""
 results=""
@@ -62,12 +70,11 @@ for file_path in "${files[@]}"; do
             skipped="${skipped}
 - ${name_without_ext}.${output_format}: skipped"
         else
-            # Build sips args - for percent mode, calculate per-file
-            if [ "$resize_mode" = "percent" ]; then
-                sips_args=$(build_sips_args "$file_path")
-            else
-                sips_args=$(build_sips_args)
-            fi
+            # Build sips args against this file. Percent resolves its scale
+            # against the file's own dimensions; the single-axis modes need it
+            # too, to see whether the axis sips works out for itself would come
+            # to less than a pixel and take the conversion down with it.
+            sips_args=$(build_sips_args "$file_path")
             
             output=$(/usr/bin/sips $sips_args --out "$output_file" "$file_path" 2>&1)
             exit_code=$?

@@ -92,11 +92,22 @@ options_json="${options_json}]"
 # and the mode is recorded in the state file so the first switch away from it is
 # seen as a change.
 "$dialog_tool" "$window_uuid" ${RESIZE_MODE_PICKER_ID} "$DEFAULT_RESIZE_MODE"
-"$dialog_tool" "$window_uuid" ${WIDTH_FIELD_ID} "$DEFAULT_RESIZE_PERCENT"
 "$dialog_tool" "$window_uuid" ${HEIGHT_FIELD_ID} omc_set_property "hidden" "true"
 "$dialog_tool" "$window_uuid" ${X_TEXT_ID} omc_set_property "hidden" "true"
 "$dialog_tool" "$window_uuid" ${PERCENT_SIGN_ID} omc_set_property "hidden" "false"
-echo "$DEFAULT_RESIZE_MODE" > "$RESIZE_MODE_STATE_FILE"
+
+# Nothing has been typed in a fresh window, so both pixel fields start out
+# following whatever gets selected. put_ rather than set_: the document declares
+# the same values, but a window is not required to arrive in the state its
+# document describes, and this is the one place that has to be sure - every
+# later dispatch decides whether the user has typed anything by comparing
+# against what is recorded here.
+RESIZE_MODE="$DEFAULT_RESIZE_MODE"
+WIDTH_SOURCE="$SOURCE_AUTO"
+HEIGHT_SOURCE="$SOURCE_AUTO"
+put_width_field "$DEFAULT_RESIZE_PERCENT"
+put_height_field ""
+save_resize_state
 
 set_status "Drop images into the list, pick a format and size, then press Convert."
 
@@ -112,10 +123,8 @@ fi
 
 if [ -n "$seed_paths" ]; then
     add_files_to_table "$seed_paths"
-    if [ -n "$_first_row_path" ]; then
-        # Visual selection only (fires no actionID); update the detail pane
-        # directly from the known path to avoid the selection-vs-handler race.
-        "$dialog_tool" "$window_uuid" ${TABLE_ID} omc_select_row 0
-        apply_file_selection "$_first_row_path"
-    fi
+    # A new window has no selection, so this takes the first row - unless the
+    # seed held no supported image and there is no row to take. That is a normal
+    # outcome, not a failed init, so it must not become the script's exit status.
+    adopt_first_row_if_unselected || true
 fi

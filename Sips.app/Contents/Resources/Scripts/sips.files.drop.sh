@@ -22,4 +22,8 @@ fi
 
 add_files_to_table "$dropped_paths"
 
-"$OMC_OMC_SUPPORT_PATH/omc_next_command" "${OMC_CURRENT_COMMAND_GUID}" "sips.files.selection.changed"
+# Dropping onto a window that had nothing selected takes the first row, so the
+# preview and the pixel fields have an image to describe.
+if ! adopt_first_row_if_unselected; then
+    "$OMC_OMC_SUPPORT_PATH/omc_next_command" "${OMC_CURRENT_COMMAND_GUID}" "sips.files.selection.changed"
+fi

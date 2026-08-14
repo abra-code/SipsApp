@@ -17,113 +17,15 @@ set_field_visibility() {
     "$dialog_tool" "$window_uuid" ${PERCENT_SIGN_ID}  omc_set_property "hidden" "$percent_hidden"
 }
 
-# ---------------------------------------------------------------------------
-# Helper: populate width/height fields with the selected image's original
-# pixel dimensions (or a derived value for single-axis modes).
-# Arguments: mode  (exact|width|height|longest)
-# ---------------------------------------------------------------------------
-# Returns 0 when it filled the fields in, 1 when there was no image to measure.
-restore_pixel_values() {
-    local mode="$1"
-    local selected_path="$OMC_ACTIONUI_TABLE_10_COLUMN_2_VALUE"
-    [ -z "$selected_path" ] || [ ! -e "$selected_path" ] && return 1
-
-    get_image_dimensions "$selected_path"
-    [ -z "$_orig_width" ] || [ -z "$_orig_height" ] && return 1
-
-    case "$mode" in
-        exact)
-            "$dialog_tool" "$window_uuid" ${WIDTH_FIELD_ID}  "$_orig_width"
-            "$dialog_tool" "$window_uuid" ${HEIGHT_FIELD_ID} "$_orig_height"
-            export OMC_ACTIONUI_VIEW_31_VALUE="$_orig_width"
-            export OMC_ACTIONUI_VIEW_32_VALUE="$_orig_height"
-            ;;
-        width)
-            "$dialog_tool" "$window_uuid" ${WIDTH_FIELD_ID} "$_orig_width"
-            export OMC_ACTIONUI_VIEW_31_VALUE="$_orig_width"
-            ;;
-        height)
-            "$dialog_tool" "$window_uuid" ${HEIGHT_FIELD_ID} "$_orig_height"
-            export OMC_ACTIONUI_VIEW_32_VALUE="$_orig_height"
-            ;;
-        longest)
-            local longest=$(( _orig_width > _orig_height ? _orig_width : _orig_height ))
-            "$dialog_tool" "$window_uuid" ${WIDTH_FIELD_ID} "$longest"
-            export OMC_ACTIONUI_VIEW_31_VALUE="$longest"
-            ;;
-    esac
-    return 0
+# The placeholder is the only thing naming what an empty field would mean, and
+# an empty field is now a state the user sees often - it is how the applet says
+# "this one follows whatever you select".
+set_width_prompt() {
+    "$dialog_tool" "$window_uuid" ${WIDTH_FIELD_ID} omc_set_property "prompt" "$1"
 }
 
-clear_width_field() {
-    "$dialog_tool" "$window_uuid" ${WIDTH_FIELD_ID} ""
-    export OMC_ACTIONUI_VIEW_31_VALUE=""
-}
-
-clear_height_field() {
-    "$dialog_tool" "$window_uuid" ${HEIGHT_FIELD_ID} ""
-    export OMC_ACTIONUI_VIEW_32_VALUE=""
-}
-
-# ---------------------------------------------------------------------------
-# Helper: seed the pixel fields a mode reads, and blank them when there is no
-# image to measure.
-#
-# Blanking is the whole point. A mode switch that wants a reseed and cannot get
-# one used to leave the fields untouched, which is how a percentage escapes into
-# a mode where the number means pixels: set 250 %, deselect everything, switch to
-# Exact Pixels, then add another image and press Convert - every file gets forced
-# to 250 px wide. A blank field fails positive_int, so build_sips_args drops the
-# flag and the conversion keeps the original size, which is the safe direction.
-# Arguments: mode  (exact|width|height|longest)
-# ---------------------------------------------------------------------------
-seed_pixel_fields() {
-    local mode="$1"
-
-    restore_pixel_values "$mode" && return
-
-    case "$mode" in
-        exact)
-            clear_width_field
-            clear_height_field
-            ;;
-        width|longest)
-            clear_width_field
-            ;;
-        height)
-            clear_height_field
-            ;;
-    esac
-}
-
-# ---------------------------------------------------------------------------
-# Helper: calculate height from width preserving aspect ratio (for "width" mode)
-# ---------------------------------------------------------------------------
-calculate_height_from_width() {
-    local selected_path="$OMC_ACTIONUI_TABLE_10_COLUMN_2_VALUE"
-    local current_width="$OMC_ACTIONUI_VIEW_31_VALUE"
-    [ -z "$selected_path" ] || [ ! -e "$selected_path" ] || [ -z "$current_width" ] && return
-
-    get_image_dimensions "$selected_path"
-    if [ -n "$_orig_width" ] && [ -n "$_orig_height" ] && [ "$_orig_width" -gt 0 ]; then
-        local new_height=$(( _orig_height * current_width / _orig_width ))
-        "$dialog_tool" "$window_uuid" ${HEIGHT_FIELD_ID} "$new_height"
-    fi
-}
-
-# ---------------------------------------------------------------------------
-# Helper: calculate width from height preserving aspect ratio (for "height" mode)
-# ---------------------------------------------------------------------------
-calculate_width_from_height() {
-    local selected_path="$OMC_ACTIONUI_TABLE_10_COLUMN_2_VALUE"
-    local current_height="$OMC_ACTIONUI_VIEW_32_VALUE"
-    [ -z "$selected_path" ] || [ ! -e "$selected_path" ] || [ -z "$current_height" ] && return
-
-    get_image_dimensions "$selected_path"
-    if [ -n "$_orig_width" ] && [ -n "$_orig_height" ] && [ "$_orig_height" -gt 0 ]; then
-        local new_width=$(( _orig_width * current_height / _orig_height ))
-        "$dialog_tool" "$window_uuid" ${WIDTH_FIELD_ID} "$new_width"
-    fi
+set_height_prompt() {
+    "$dialog_tool" "$window_uuid" ${HEIGHT_FIELD_ID} omc_set_property "prompt" "$1"
 }
 
 # ---------------------------------------------------------------------------
@@ -148,101 +50,149 @@ validate_quality() {
 }
 
 # ---------------------------------------------------------------------------
-# Handle resize-mode changes: show/hide fields, convert values between
-# percentage and pixel representations so the text fields always hold the
-# correct unit for the active mode.
+# Keep the percent field inside the range the builder will act on.
+#
+# The builder already falls back to 100 and clamps at MAX_RESIZE_PERCENT, so
+# nothing here changes what a conversion does. What it changes is the field
+# agreeing with it: 9999 left standing next to a conversion that scaled by 500 %
+# is the applet reporting something it did not do.
 # ---------------------------------------------------------------------------
-handle_resize_mode_change() {
-    local new_mode="$OMC_ACTIONUI_VIEW_30_VALUE"
+validate_percent() {
+    set_width_field "$(clamped_percent "$OMC_ACTIONUI_VIEW_31_VALUE")"
+}
 
-    # Read the previous mode from our state file (empty on first run)
-    local prev_mode=""
-    [ -f "$RESIZE_MODE_STATE_FILE" ] && prev_mode=$(cat "$RESIZE_MODE_STATE_FILE")
+# ---------------------------------------------------------------------------
+# Say what a pixel mode the user has typed nothing into will actually do.
+#
+# The fields fill themselves in from the selected image, which makes them look
+# like an instruction that has already been given - and the conversion, which
+# acts only on what the user typed, would then read as doing nothing. Said at
+# the moment the mode is chosen, because that is when the expectation forms.
+# ---------------------------------------------------------------------------
+announce_descriptive_fields() {
+    [ "$WIDTH_SOURCE"  = "$SOURCE_TYPED" ] && return 1
+    [ "$HEIGHT_SOURCE" = "$SOURCE_TYPED" ] && return 1
+    set_status "These fields show the selected image's size. Type a size into one to apply it to all of them; leave them alone and each image keeps its own size."
+    return 0
+}
 
-    # Persist the new mode for the next invocation
-    echo "$new_mode" > "$RESIZE_MODE_STATE_FILE"
+# ---------------------------------------------------------------------------
+# The resize mode changed: lay the fields out for the new mode and decide what
+# survives the switch.
+# ---------------------------------------------------------------------------
+apply_resize_mode() {
+    local new_mode="$1"
+    local prev_mode="$2"
 
-    # If the mode didn't actually change, just do incremental calculations
-    # (user is typing in a text field, not switching the picker).
-    if [ "$new_mode" = "$prev_mode" ]; then
-        case "$new_mode" in
-            width)   calculate_height_from_width ;;
-            height)  calculate_width_from_height ;;
-        esac
-        return
-    fi
+    # A field the new mode does not own stops being the user's. In Width mode the
+    # height is a consequence of the width rather than a choice; in Height mode
+    # it is the other way round; percent owns neither. A lock left on a field the
+    # user cannot see is one they have no way to release.
+    case "$new_mode" in
+        exact)         ;;
+        width|longest) HEIGHT_SOURCE="$SOURCE_AUTO" ;;
+        height)        WIDTH_SOURCE="$SOURCE_AUTO" ;;
+        *)             WIDTH_SOURCE="$SOURCE_AUTO"
+                       HEIGHT_SOURCE="$SOURCE_AUTO" ;;
+    esac
 
-    # --- Mode is changing - configure field visibility and convert values ---
-
-    local was_percent="false"
-    [ "$prev_mode" = "percent" ] && was_percent="true"
+    # Coming out of percent, the width field holds a 1-500 scale factor, and read
+    # as a pixel count it is a lie that survives into the next conversion: set
+    # 250 %, switch to Exact Pixels, press Convert, and every file comes out
+    # 250 px wide. The number goes, whoever put it there.
+    #
+    # An unrecognized previous mode is treated the same way, because the only way
+    # to get one is to have lost the state file - and the number standing in the
+    # field is then of unknown unit, which is the same problem with less
+    # information. TMPDIR is purged periodically, so a long-lived window reaches
+    # this on its own.
+    case "$prev_mode" in
+        exact|width|height|longest) ;;
+        *)
+            WIDTH_SOURCE="$SOURCE_AUTO"
+            HEIGHT_SOURCE="$SOURCE_AUTO"
+            set_width_field ""
+            set_height_field ""
+            ;;
+    esac
 
     case "$new_mode" in
         exact)
             set_field_visibility "false" "false" "false" "true"
-            "$dialog_tool" "$window_uuid" ${WIDTH_FIELD_ID} omc_set_property "prompt" "width"
-            # Exact pixels is the one mode that needs both fields to hold real
-            # pixel counts, and it can be reached in two states that do not.
-            # Coming from percent, the width field holds a 1-500 scale factor,
-            # which is meaningless as a width. Coming from a mode the user never
-            # gave an image to, the fields were never filled in at all. Either
-            # way, seed both from the selected image.
-            #
-            # A width the user actually typed in Width mode (with its height
-            # already derived alongside it) is a deliberate choice, so leave that
-            # pair alone rather than overwriting it with the original size.
-            if [ "$was_percent" = "true" ] \
-                || [ -z "$(positive_int "$OMC_ACTIONUI_VIEW_31_VALUE")" ] \
-                || [ -z "$(positive_int "$OMC_ACTIONUI_VIEW_32_VALUE")" ]; then
-                seed_pixel_fields "exact"
-            fi
+            set_width_prompt "width"
             ;;
         width)
             set_field_visibility "false" "true" "true" "true"
-            "$dialog_tool" "$window_uuid" ${WIDTH_FIELD_ID} omc_set_property "prompt" "width"
-            if [ "$was_percent" = "true" ]; then
-                seed_pixel_fields "width"
-            fi
-            calculate_height_from_width
+            set_width_prompt "width"
             ;;
         height)
             set_field_visibility "true" "false" "true" "true"
-            "$dialog_tool" "$window_uuid" ${HEIGHT_FIELD_ID} omc_set_property "prompt" "height"
-            if [ "$was_percent" = "true" ]; then
-                seed_pixel_fields "height"
-            fi
-            calculate_width_from_height
+            set_height_prompt "height"
             ;;
         longest)
             set_field_visibility "false" "true" "true" "true"
-            "$dialog_tool" "$window_uuid" ${WIDTH_FIELD_ID} omc_set_property "prompt" "longest edge"
-            if [ "$was_percent" = "true" ]; then
-                seed_pixel_fields "longest"
-            fi
+            set_width_prompt "longest edge"
             ;;
         percent)
             set_field_visibility "false" "true" "true" "false"
-            "$dialog_tool" "$window_uuid" ${WIDTH_FIELD_ID} omc_set_property "prompt" "percent"
-            # Always reset to 100 % when entering percent mode
-            "$dialog_tool" "$window_uuid" ${WIDTH_FIELD_ID} "$DEFAULT_RESIZE_PERCENT"
-            export OMC_ACTIONUI_VIEW_31_VALUE="$DEFAULT_RESIZE_PERCENT"
+            set_width_prompt "percent"
+            # Always back to 100 %. Whatever stood there a moment ago was a pixel
+            # count, and 1200 px reading as 1200 % is the same lie in the other
+            # direction.
+            put_width_field "$DEFAULT_RESIZE_PERCENT"
             ;;
         *)
             set_field_visibility "false" "false" "false" "true"
-            "$dialog_tool" "$window_uuid" ${WIDTH_FIELD_ID} omc_set_property "prompt" "width"
+            set_width_prompt "width"
             ;;
     esac
+}
+
+# ---------------------------------------------------------------------------
+# The whole resize section, on every dispatch that touches it.
+#
+# One handler serves the mode picker and both text fields, and the thing it has
+# to work out first is whether the picker moved - which only the state file
+# knows, since the engine hands over the current mode and not the previous one.
+# Everything else follows from the values in the fields.
+# ---------------------------------------------------------------------------
+handle_resize_controls() {
+    local mode="$OMC_ACTIONUI_VIEW_30_VALUE"
+
+    load_resize_state
+    local prev_mode="$RESIZE_MODE"
+    RESIZE_MODE="$mode"
+
+    local mode_changed="no"
+    if [ "$mode" != "$prev_mode" ]; then
+        mode_changed="yes"
+        apply_resize_mode "$mode" "$prev_mode"
+    fi
+
+    if [ "$mode" = "percent" ]; then
+        validate_percent
+    else
+        refresh_resize_fields "$mode" "$OMC_ACTIONUI_TABLE_10_COLUMN_2_VALUE"
+        # A field changing hands is the news; failing that, a mode the user has
+        # just arrived in is worth explaining once. Neither overwrites the other,
+        # and nothing is said on the dispatches in between.
+        if ! announce_pin_changes && [ "$mode_changed" = "yes" ]; then
+            announce_descriptive_fields
+        fi
+    fi
+
+    save_resize_state
 }
 
 # ===== Main =====
 
 validate_quality
 
-# Handle resize mode - show/hide fields, convert pixel<->percent values.
-# This runs before the "is anything selected" check on purpose: the window now
-# opens empty, so the user reaches the resize picker before any image is in the
-# list, and the fields still have to follow the mode they pick.
-handle_resize_mode_change
+# Lay out and fill the resize fields. This runs before the "is anything
+# selected" check on purpose: the window opens empty, so the user reaches the
+# resize picker before any image is in the list, and the fields still have to
+# follow the mode they pick.
+handle_resize_controls
 
 # Get selected file path from table (column 2)
 selected_path="$OMC_ACTIONUI_TABLE_10_COLUMN_2_VALUE"
