@@ -23,7 +23,6 @@ validate_and_correct_quality() {
     fi
     
     if [ "$corrected" != "$quality" ]; then
-        echo "[DEBUG] Correcting quality from $quality to $corrected"
         "$dialog_tool" "$window_uuid" ${QUALITY_FIELD_ID} "$corrected"
     fi
 }

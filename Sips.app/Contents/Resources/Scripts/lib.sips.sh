@@ -13,6 +13,8 @@ IMAGE_PREVIEW_ID=20
 RESIZE_MODE_PICKER_ID=30
 WIDTH_FIELD_ID=31
 HEIGHT_FIELD_ID=32
+X_TEXT_ID=33
+PERCENT_SIGN_ID=34
 
 # Rotation/Flip controls
 ROTATE_PICKER_ID=40
@@ -24,12 +26,48 @@ COMPRESSION_PICKER_ID=50
 QUALITY_FIELD_ID=51
 QUALITY_LABEL_ID=52
 
-# State file to track current resize mode across script invocations
-RESIZE_MODE_STATE_FILE="/tmp/sips_resize_mode.txt"
+# The resize mode the window starts on. Percentage at 100 % is the only default
+# that cannot fail: it needs no knowledge of any particular image, and it means
+# "keep the size" until the user asks for something else. Exact Pixels used to be
+# the default and came up as 0 x 0 with nothing selected, which made every
+# conversion fail with no visible reason.
+DEFAULT_RESIZE_MODE="percent"
+DEFAULT_RESIZE_PERCENT=100
 
 # Get dialog tool path
 dialog_tool="$OMC_OMC_SUPPORT_PATH/omc_dialog_control"
+next_cmd="$OMC_OMC_SUPPORT_PATH/omc_next_command"
+alert_tool="$OMC_OMC_SUPPORT_PATH/alert"
+pasteboard_tool="$OMC_OMC_SUPPORT_PATH/pasteboard"
 window_uuid="$OMC_ACTIONUI_WINDOW_UUID"
+
+# Private pasteboard key: hand a selection from the Open... panel to a window
+# that does not exist yet, so its init script can pick it up.
+OPEN_PATHS_PB_KEY="SIPS_OPEN_PATHS"
+
+# State file tracking the current resize mode across script invocations.
+# Keyed by window UUID - the applet can have several windows open at once
+# (File > Open... makes a new one) and a shared file would let one window's
+# mode switch rewrite another window's fields.
+RESIZE_MODE_STATE_FILE="${TMPDIR:-/tmp}/sips_resize_mode_${window_uuid}.txt"
+
+# Set the status text view content
+# Arguments: text
+set_status() {
+    "$dialog_tool" "$window_uuid" ${FILE_INFO_VIEW_ID} "$1"
+}
+
+# Echo the argument when it is a positive whole number, nothing otherwise.
+# Every resize flag below is built from a text field the user can leave empty or
+# fill with junk; sips rejects a zero or negative dimension and the whole
+# conversion fails, so a value that cannot be used has to drop its flag instead.
+# Arguments: value
+positive_int() {
+    case "$1" in
+        '' | *[!0-9]*) return ;;
+    esac
+    [ "$1" -gt 0 ] && echo "$1"
+}
 
 # Get original pixel dimensions of an image file.
 # Arguments: image_file_path
@@ -185,9 +223,17 @@ $filename"
     done < "$tmp_new"
     /bin/rm -f "$tmp_new"
 
-    # Sort, remove duplicates, and set table rows
+    # Sort, remove duplicates, and set table rows.
+    # The sorted rows go through a temp file so the path that ends up in row 0
+    # can be read back - callers use it to select and preview the first image
+    # without waiting for a selection event that may not have landed yet.
+    _first_row_path=""
     if [ -n "$buffer" ]; then
-        printf "%s" "$buffer" | /usr/bin/sort -u | "$dialog_tool" "$window_uuid" ${TABLE_ID} omc_table_set_rows_from_stdin
+        local tmp_rows="$(/usr/bin/mktemp "${TMPDIR:-/tmp}/sips.XXXXXX")"
+        printf "%s" "$buffer" | /usr/bin/sort -u > "$tmp_rows"
+        _first_row_path="$(/usr/bin/head -1 "$tmp_rows" | /usr/bin/cut -f2)"
+        "$dialog_tool" "$window_uuid" ${TABLE_ID} omc_table_set_rows_from_stdin < "$tmp_rows"
+        /bin/rm -f "$tmp_rows"
     else
         "$dialog_tool" "$window_uuid" ${TABLE_ID} omc_table_remove_all_rows
     fi
@@ -213,48 +259,57 @@ build_sips_args() {
     local width="$OMC_ACTIONUI_VIEW_31_VALUE"
     local height="$OMC_ACTIONUI_VIEW_32_VALUE"
 
-    # Apply resize options
+    # Apply resize options. Each branch drops its flag when the field it reads
+    # does not hold a usable number, so an empty or half-typed field converts the
+    # image at its original size instead of failing.
+    local w
+    local h
     case "$resize_mode" in
         exact)
-            if [ -n "$width" ] && [ -n "$height" ]; then
-                sips_args="$sips_args -z $height $width"
+            w="$(positive_int "$width")"
+            h="$(positive_int "$height")"
+            if [ -n "$w" ] && [ -n "$h" ]; then
+                sips_args="$sips_args -z $h $w"
             fi
             ;;
         width)
-            if [ -n "$width" ]; then
-                sips_args="$sips_args --resampleWidth $width"
+            w="$(positive_int "$width")"
+            if [ -n "$w" ]; then
+                sips_args="$sips_args --resampleWidth $w"
             fi
             ;;
         height)
-            if [ -n "$height" ]; then
-                sips_args="$sips_args --resampleHeight $height"
+            h="$(positive_int "$height")"
+            if [ -n "$h" ]; then
+                sips_args="$sips_args --resampleHeight $h"
             fi
             ;;
         longest)
-            if [ -n "$width" ]; then
-                sips_args="$sips_args -Z $width"
+            w="$(positive_int "$width")"
+            if [ -n "$w" ]; then
+                sips_args="$sips_args -Z $w"
             fi
             ;;
         percent)
-            # The width field contains a percentage value — compute absolute pixels per image
-            if [ -n "$width" ] && [ -n "$image_path" ] && [ -e "$image_path" ]; then
-                local percent="$width"
-                case "$percent" in
-                    '' | *[!0-9]*)
-                        percent=100 ;;
-                    *)
-                        if [ "$percent" -lt 1 ]; then
-                            percent=100
-                        elif [ "$percent" -gt 500 ]; then
-                            percent=500
-                        fi ;;
-                esac
+            # The width field contains a percentage value - compute absolute pixels per image
+            if [ -n "$image_path" ] && [ -e "$image_path" ]; then
+                local percent="$(positive_int "$width")"
+                : "${percent:=$DEFAULT_RESIZE_PERCENT}"
+                [ "$percent" -gt 500 ] && percent=500
 
-                get_image_dimensions "$image_path"
-                if [ -n "$_orig_width" ] && [ -n "$_orig_height" ] && [ "$_orig_width" -gt 0 ]; then
-                    local new_width=$(( _orig_width * percent / 100 ))
-                    local new_height=$(( _orig_height * percent / 100 ))
-                    sips_args="$sips_args -z $new_height $new_width"
+                # 100 % is the resting default, and re-encoding an image at its
+                # own dimensions only costs a resample pass - so emit nothing.
+                if [ "$percent" -ne 100 ]; then
+                    get_image_dimensions "$image_path"
+                    if [ -n "$_orig_width" ] && [ -n "$_orig_height" ] && [ "$_orig_width" -gt 0 ]; then
+                        local new_width=$(( _orig_width * percent / 100 ))
+                        local new_height=$(( _orig_height * percent / 100 ))
+                        # A small enough image scaled far enough down rounds to
+                        # zero on one axis, which sips rejects.
+                        [ "$new_width" -lt 1 ] && new_width=1
+                        [ "$new_height" -lt 1 ] && new_height=1
+                        sips_args="$sips_args -z $new_height $new_width"
+                    fi
                 fi
             fi
             ;;
@@ -302,40 +357,35 @@ build_sips_args() {
     echo "$sips_args"
 }
 
-# Function to build complete sips command from current UI settings
-# Arguments: input_file output_file
-# Returns: sips command line (not executed)
-build_sips_command() {
-    local input_file="$1"
-    local output_file="$2"
-    
-    local sips_args=$(build_sips_args)
-    
-    # Add output path
-    sips_args="$sips_args --out $output_file"
-    
-    # Add input file
-    sips_args="$sips_args $input_file"
-    
-    echo "/usr/bin/sips $sips_args"
-}
-
 # Function to update image preview
 # Arguments: image_file_path
 update_image_preview() {
     local image_path="$1"
-    
-    echo "[DEBUG update_image_preview] image_path='$image_path'"
-    echo "[DEBUG update_image_preview] IMAGE_PREVIEW_ID=${IMAGE_PREVIEW_ID}"
-    echo "[DEBUG update_image_preview] window_uuid='$window_uuid'"
-    
+
     if [ -n "$image_path" ] && [ -e "$image_path" ]; then
-        echo "[DEBUG update_image_preview] Setting image to: $image_path"
         "$dialog_tool" "$window_uuid" ${IMAGE_PREVIEW_ID} "$image_path"
     else
-        echo "[DEBUG update_image_preview] Clearing image"
         "$dialog_tool" "$window_uuid" ${IMAGE_PREVIEW_ID} ""
     fi
+}
+
+# Bring the selection-dependent controls in line with a file path, or with
+# nothing selected when the path is empty.
+# Arguments: image_file_path (may be empty)
+apply_file_selection() {
+    local image_path="$1"
+
+    if [ -n "$image_path" ]; then
+        "$dialog_tool" "$window_uuid" ${REMOVE_BUTTON_ID} omc_enable
+        "$dialog_tool" "$window_uuid" ${REVEAL_BUTTON_ID} omc_enable
+        "$dialog_tool" "$window_uuid" ${INFO_BUTTON_ID} omc_enable
+    else
+        "$dialog_tool" "$window_uuid" ${REMOVE_BUTTON_ID} omc_disable
+        "$dialog_tool" "$window_uuid" ${REVEAL_BUTTON_ID} omc_disable
+        "$dialog_tool" "$window_uuid" ${INFO_BUTTON_ID} omc_disable
+    fi
+
+    update_image_preview "$image_path"
 }
 
 # Function to get image info using sips
