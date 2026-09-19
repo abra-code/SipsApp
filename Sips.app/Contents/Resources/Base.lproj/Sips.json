@@ -27,6 +27,7 @@
         "type": "Table",
         "id": 10,
         "properties": {
+          "scrollContentBackground": "hidden",
           "columns": ["Image"],
           "widths": [230],
           "actionID": "sips.files.selection.changed",
