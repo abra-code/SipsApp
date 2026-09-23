@@ -50,6 +50,7 @@
               "imageScale": "large",
               "buttonStyle": "plain",
               "actionID": "sips.add.files",
+              "help": "Add images or folders",
               "frame": {
                 "width": 32,
                 "height": 32
@@ -64,6 +65,7 @@
               "imageScale": "large",
               "buttonStyle": "plain",
               "actionID": "sips.remove.selected",
+              "help": "Remove the selected file from the list",
               "disabled": true,
               "frame": {
                 "width": 32,
@@ -93,6 +95,7 @@
               "imageScale": "medium",
               "buttonStyle": "plain",
               "actionID": "sips.reveal.in.finder",
+              "help": "Show the selected file in Finder",
               "disabled": true,
               "frame": {
                 "width": 32,
@@ -108,6 +111,7 @@
               "imageScale": "medium",
               "buttonStyle": "plain",
               "actionID": "sips.info",
+              "help": "Show the full image details of the selected file",
               "disabled": true,
               "frame": {
                 "width": 32,
@@ -126,6 +130,7 @@
               "imageScale": "large",
               "buttonStyle": "plain",
               "actionID": "sips.clear.all",
+              "help": "Remove all files from the list (the files themselves are not touched)",
               "frame": {
                 "width": 32,
                 "height": 32
